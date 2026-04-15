@@ -16,13 +16,13 @@
 // @connect      googlevideo.com
 // @noframes
 // @run-at       document-start
-// @require      file:///Users/tommy/Documents/youtubeUtility/modules/constants.js
-// @require      file:///Users/tommy/Documents/youtubeUtility/modules/styles.js
-// @require      file:///Users/tommy/Documents/youtubeUtility/modules/transcript.js
-// @require      file:///Users/tommy/Documents/youtubeUtility/modules/groq.js
-// @require      file:///Users/tommy/Documents/youtubeUtility/modules/sponsor.js
-// @require      file:///Users/tommy/Documents/youtubeUtility/modules/ui.js
-// @require      file:///Users/tommy/Documents/youtubeUtility/modules/main.js
+// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/constants.js
+// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/styles.js
+// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/transcript.js
+// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/groq.js
+// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/sponsor.js
+// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/ui.js
+// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/main.js
 // ==/UserScript==
 
 // All logic loaded via @require modules. See /modules/ directory for source.
