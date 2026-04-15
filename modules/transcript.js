@@ -110,14 +110,32 @@
 
     const subtitleUrl = targetTrack.baseUrl.replace('&fmt=srv3', '');
 
-    let rawText;
-    try {
-      const res = await win.fetch(subtitleUrl, { credentials: 'omit' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      rawText = await res.text();
-    } catch (e) {
-      throw new Error(`Subtitle fetch failed: ${e.message}`);
+    // Graceful fallback: if translation (&tlang=) fails, retry without it
+    const urlsToTry = [subtitleUrl];
+    if (subtitleUrl.includes('&tlang=')) {
+      urlsToTry.push(subtitleUrl.replace(/&tlang=[^&]+/, ''));
     }
+
+    let rawText;
+    let lastError;
+    for (const url of urlsToTry) {
+      try {
+        const res = await win.fetch(url, { credentials: 'omit' });
+        if (!res.ok) {
+          lastError = new Error(`HTTP ${res.status}`);
+          continue;
+        }
+        rawText = await res.text();
+        if (url !== urlsToTry[0]) {
+          console.log('[YT AI] Translation failed, fell back to native track');
+        }
+        break;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+
+    if (!rawText) throw lastError || new Error('Subtitle fetch failed');
 
     return parseTimedText(rawText);
   };
