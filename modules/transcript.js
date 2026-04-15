@@ -13,15 +13,11 @@
   const { win, doc } = UTILS;
   const { LANGUAGES } = CONSTANTS;
 
-  // Lazy accessor for GM_xmlhttpRequest (set by loader AFTER @require modules load)
-  const _gm = () => window.YTAI?.GM_xmlhttpRequest;
-
   // ───────────────────────────────────────────────────────────────────────────
   // Unified GM_xmlhttpRequest helper (bypasses YouTube page-level rate limits)
   // ───────────────────────────────────────────────────────────────────────────
   const gmRequest = (method, url, body = null, json = false) => new Promise((resolve, reject) => {
-    const GM_xmlhttpRequest = _gm();
-    if (!GM_xmlhttpRequest) {
+    if (typeof GM_xmlhttpRequest === 'undefined') {
       reject(new Error('GM_xmlhttpRequest not available'));
       return;
     }
