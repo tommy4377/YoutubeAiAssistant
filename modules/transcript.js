@@ -116,18 +116,26 @@
       urlsToTry.push(subtitleUrl.replace(/&tlang=[^&]+/, ''));
     }
 
+    // Use GM_xmlhttpRequest to bypass YouTube's page-level rate limiting on translations
+    const gmFetch = (url) => new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url,
+        responseType: 'text',
+        onload: (res) => {
+          if (res.status >= 200 && res.status < 300) resolve(res.responseText);
+          else reject(new Error(`HTTP ${res.status}`));
+        },
+        onerror: () => reject(new Error('Network error')),
+        ontimeout: () => reject(new Error('Request timed out')),
+      });
+    });
+
     let rawText;
     let lastError;
     for (const url of urlsToTry) {
       try {
-        // Translation (&tlang=) needs cookies to avoid 429; native URLs work fine without
-        const useCookies = url.includes('&tlang=');
-        const res = await win.fetch(url, { credentials: useCookies ? 'include' : 'omit' });
-        if (!res.ok) {
-          lastError = new Error(`HTTP ${res.status}`);
-          continue;
-        }
-        rawText = await res.text();
+        rawText = await gmFetch(url);
         if (url !== urlsToTry[0]) {
           console.log('[YT AI] Translation failed, fell back to native track');
         }
