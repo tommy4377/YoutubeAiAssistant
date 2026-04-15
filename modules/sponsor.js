@@ -16,9 +16,10 @@
     SEG_TYPE_SPONSOR,
     KEY_SPONSOR_CACHE,
     SPONSOR_CACHE_MAX,
+    SPONSOR_MODEL,
     C,
   } = CONSTANTS;
-  const { doc, escapeHTML, setHTML, selectGroqModel } = UTILS;
+  const { doc, escapeHTML, setHTML } = UTILS;
 
   // ───────────────────────────────────────────────────────────────────────────
   // Cache Management
@@ -38,12 +39,59 @@
   };
 
   // ───────────────────────────────────────────────────────────────────────────
-  // Majority Vote Logic
+  // Agreement Calculation (measures overlap between two results)
+  // ───────────────────────────────────────────────────────────────────────────
+  const computeAgreement = (r0, r1) => {
+    if (!r0.length && !r1.length) return 1; // Both empty = perfect agreement
+    if (!r0.length || !r1.length) return 0; // One empty, one not = no agreement
+
+    let totalAgreement = 0;
+    let totalSegments = 0;
+
+    // Check agreement for r0 segments
+    for (const seg of r0) {
+      const segDuration = seg.end - seg.start;
+      if (segDuration <= 0) continue;
+
+      const hasOverlap = r1.some(other => {
+        const overlapStart = Math.max(seg.start, other.start);
+        const overlapEnd = Math.min(seg.end, other.end);
+        const overlap = overlapEnd - overlapStart;
+        return overlap / segDuration >= 0.5;
+      });
+
+      totalAgreement += hasOverlap ? 1 : 0;
+      totalSegments++;
+    }
+
+    // Check agreement for r1 segments (reverse)
+    for (const seg of r1) {
+      const segDuration = seg.end - seg.start;
+      if (segDuration <= 0) continue;
+
+      const hasOverlap = r0.some(other => {
+        const overlapStart = Math.max(seg.start, other.start);
+        const overlapEnd = Math.min(seg.end, other.end);
+        const overlap = overlapEnd - overlapStart;
+        return overlap / segDuration >= 0.5;
+      });
+
+      totalAgreement += hasOverlap ? 1 : 0;
+      totalSegments++;
+    }
+
+    return totalSegments > 0 ? totalAgreement / totalSegments : 0;
+  };
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Majority Vote Logic (works with 2 or 3 results)
   // ───────────────────────────────────────────────────────────────────────────
   const majorityVote = (results) => {
-    const [r0, r1, r2] = results;
-    const allCalls = [r0, r1, r2];
     const confirmed = [];
+    const allCalls = results;
+
+    // Need at least 2 votes out of N calls
+    const minVotes = 2;
 
     for (let ci = 0; ci < allCalls.length; ci++) {
       for (const seg of allCalls[ci]) {
@@ -61,7 +109,7 @@
           if (hasOverlap) votes++;
         }
 
-        if (votes >= 2) {
+        if (votes >= minVotes) {
           const isDuplicate = confirmed.some(c => {
             const overlapStart = Math.max(seg.start, c.start);
             const overlapEnd = Math.min(seg.end, c.end);
@@ -76,7 +124,7 @@
   };
 
   // ───────────────────────────────────────────────────────────────────────────
-  // Detection Orchestrator
+  // Detection Orchestrator (2 sequential calls + conditional 3rd tiebreaker)
   // ───────────────────────────────────────────────────────────────────────────
   const detectSponsors = async (videoId, data, apiKey) => {
     if (!data?.length || !videoId) {
@@ -91,18 +139,29 @@
 
     const slim = data.map(l => ({ t: Math.round(l.start), s: l.text }));
     const transcriptJson = JSON.stringify(slim).substring(0, 15000);
-    const model = selectGroqModel(transcriptJson.length);
+    const model = SPONSOR_MODEL; // Always use cheapest model for sponsor detection
 
-    console.log('[YT AI] Sponsor detection: running 3 parallel calls for majority vote…');
+    console.log('[YT AI] Sponsor detection: running 2 sequential calls…');
 
-    // Triple-check with majority vote
-    const results = await Promise.all([
-      GROQ.callSponsor(apiKey, transcriptJson, model),
-      GROQ.callSponsor(apiKey, transcriptJson, model),
-      GROQ.callSponsor(apiKey, transcriptJson, model),
-    ]);
+    // First 2 calls - sequential (queued by groq.js with 2s gap)
+    const r0 = await GROQ.callSponsor(apiKey, transcriptJson, model);
+    const r1 = await GROQ.callSponsor(apiKey, transcriptJson, model);
 
-    console.log('[YT AI] Raw sponsor results:', results.map(r => r.length));
+    console.log('[YT AI] Raw sponsor results:', [r0.length, r1.length]);
+
+    // Check agreement between first 2 calls
+    const agreement = computeAgreement(r0, r1);
+    console.log(`[YT AI] Sponsor agreement: ${Math.round(agreement * 100)}%`);
+
+    let results = [r0, r1];
+
+    // If low agreement, add 3rd tiebreaker call
+    if (agreement < 0.5) {
+      console.log('[YT AI] Sponsor detection: low agreement, running tiebreaker call…');
+      const r2 = await GROQ.callSponsor(apiKey, transcriptJson, model);
+      results.push(r2);
+      console.log('[YT AI] Tiebreaker result:', r2.length);
+    }
 
     const segments = majorityVote(results);
 
@@ -115,7 +174,7 @@
     }
     saveCache(c);
 
-    console.log(`[YT AI] Sponsor detection: ${segments.length} confirmed segment(s) after majority vote`);
+    console.log(`[YT AI] Sponsor detection: ${segments.length} confirmed segment(s) after majority vote (${results.length} calls)`);
     return segments;
   };
 
@@ -254,6 +313,7 @@
   window.YTAI = window.YTAI || {};
   window.YTAI.SPONSOR = {
     // Detection
+    computeAgreement,
     majorityVote,
     detectSponsors,
     loadCache,

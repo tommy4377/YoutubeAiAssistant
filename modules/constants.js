@@ -37,6 +37,9 @@
     return 'openai/gpt-oss-120b'; // Production model (was llama-4-scout Preview)
   };
 
+  // Dedicated cheap model for sponsor detection (sufficient for classification)
+  const SPONSOR_MODEL = 'llama-3.1-8b-instant';
+
   // ───────────────────────────────────────────────────────────────────────────
   // Storage Keys
   // ───────────────────────────────────────────────────────────────────────────
@@ -46,8 +49,8 @@
   const KEY_S_LANG = 'summary_lang';
   const KEY_CACHE = 'summary_cache_v2';
   const KEY_SPONSOR_CACHE = 'sponsor_cache_v1';
-  const SPONSOR_CACHE_MAX = 10;
-  const CACHE_MAX = 6;
+  const SPONSOR_CACHE_MAX = 50;
+  const CACHE_MAX = 30;
   const FOOTER = 'YouTube AI Assistant by tommy437';
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -164,6 +167,7 @@
   // Constants
   window.YTAI.CONSTANTS = {
     GROQ_URL,
+    SPONSOR_MODEL,
     WIDGET_ID,
     KEY_API,
     KEY_T_LANG,

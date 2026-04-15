@@ -14,9 +14,42 @@
   const { selectGroqModel } = UTILS;
 
   // ───────────────────────────────────────────────────────────────────────────
-  // Promisified GM_xmlhttpRequest
+  // Request Queue with 2s minimum gap (prevents rate limit 429s)
   // ───────────────────────────────────────────────────────────────────────────
-  const request = (options) => new Promise((resolve, reject) => {
+  let _lastCallTime = 0;
+  const _callQueue = [];
+  let _isProcessingQueue = false;
+
+  const MIN_CALL_GAP_MS = 2000; // 2 seconds between requests
+
+  const processQueue = async () => {
+    if (_isProcessingQueue) return;
+    _isProcessingQueue = true;
+
+    while (_callQueue.length > 0) {
+      const { options, resolve, reject } = _callQueue.shift();
+
+      // Enforce minimum gap between calls
+      const now = Date.now();
+      const timeSinceLastCall = now - _lastCallTime;
+      if (timeSinceLastCall < MIN_CALL_GAP_MS) {
+        await new Promise(r => setTimeout(r, MIN_CALL_GAP_MS - timeSinceLastCall));
+      }
+      _lastCallTime = Date.now();
+
+      // Execute the actual request
+      try {
+        const result = await executeRequest(options);
+        resolve(result);
+      } catch (e) {
+        reject(e);
+      }
+    }
+
+    _isProcessingQueue = false;
+  };
+
+  const executeRequest = (options) => new Promise((resolve, reject) => {
     if (typeof GM_xmlhttpRequest === 'undefined') {
       reject(new Error('GM_xmlhttpRequest not available'));
       return;
@@ -28,6 +61,11 @@
       onerror: reject,
       ontimeout: reject,
     });
+  });
+
+  const request = (options) => new Promise((resolve, reject) => {
+    _callQueue.push({ options, resolve, reject });
+    processQueue();
   });
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -190,7 +228,7 @@ Rules:
           ],
           response_format: { type: 'json_object' },
           temperature: 0.1,
-          max_completion_tokens: 512,
+          max_completion_tokens: 256, // Reduced from 512 - sponsor JSON is short
           stream: false,
         }),
       });
