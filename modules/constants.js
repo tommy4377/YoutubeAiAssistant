@@ -34,7 +34,7 @@
   const selectGroqModel = (len) => {
     if (len <= 11000) return 'llama-3.1-8b-instant';
     if (len <= 26000) return 'llama-3.3-70b-versatile';
-    return 'meta-llama/llama-4-scout-17b-16e-instruct';
+    return 'openai/gpt-oss-120b'; // Production model (was llama-4-scout Preview)
   };
 
   // ───────────────────────────────────────────────────────────────────────────

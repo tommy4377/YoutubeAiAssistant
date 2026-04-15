@@ -13,10 +13,20 @@
   const { GROQ_URL, LANGUAGES, SVG } = CONSTANTS;
   const { selectGroqModel } = UTILS;
 
+  // Get GM_xmlhttpRequest from window.YTAI (exported by loader for reliability)
+  const GM_xmlhttpRequest = window.YTAI?.GM_xmlhttpRequest;
+  if (!GM_xmlhttpRequest) {
+    console.error('[YTAI Groq] GM_xmlhttpRequest not available. Check userscript @grant directives.');
+  }
+
   // ───────────────────────────────────────────────────────────────────────────
   // Promisified GM_xmlhttpRequest
   // ───────────────────────────────────────────────────────────────────────────
   const request = (options) => new Promise((resolve, reject) => {
+    if (!GM_xmlhttpRequest) {
+      reject(new Error('GM_xmlhttpRequest not available'));
+      return;
+    }
     GM_xmlhttpRequest({
       timeout: 90000, // 90 second timeout for AI inference
       ...options,
