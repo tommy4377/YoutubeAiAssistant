@@ -120,7 +120,9 @@
     let lastError;
     for (const url of urlsToTry) {
       try {
-        const res = await win.fetch(url, { credentials: 'omit' });
+        // Translation (&tlang=) needs cookies to avoid 429; native URLs work fine without
+        const useCookies = url.includes('&tlang=');
+        const res = await win.fetch(url, { credentials: useCookies ? 'include' : 'omit' });
         if (!res.ok) {
           lastError = new Error(`HTTP ${res.status}`);
           continue;
