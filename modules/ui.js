@@ -38,7 +38,7 @@
   // ───────────────────────────────────────────────────────────────────────────
   // HTML Generators
   // ───────────────────────────────────────────────────────────────────────────
-  const htmlSetup = (hasKey) => {
+  const htmlSetup = () => {
     return `
       <div class="ytai-header">
         <div class="ytai-tab active" style="pointer-events:none">AI Assistant</div>
@@ -232,9 +232,12 @@
   // Text Formatting
   // ───────────────────────────────────────────────────────────────────────────
   const bold = (t) => {
-    return (t || '')
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/(?<![a-zA-Z0-9'])\*([^\s*'][^*']{1,}[^\s*'])\*(?![a-zA-Z0-9'])/g, '<em>$1</em>');
+    // First handle **bold** (must come before *italic* to avoid conflict)
+    let s = (t || '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // Then handle *italic* - Safari-compatible version (no lookbehind)
+    // Match *text* where text doesn't start/end with space/* and isn't surrounded by alphanumerics
+    s = s.replace(/(^|[\s(])\*([^\s*'][^*']{1,}[^\s*'])\*(?![a-zA-Z0-9'])/g, '$1<em>$2</em>');
+    return s;
   };
 
   const toPlainText = (str) => {

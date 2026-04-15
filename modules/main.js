@@ -59,6 +59,10 @@
       // Lifecycle
       this._isIniting = false;
 
+      // Fetch generation counters (to cancel stale results)
+      this._fetchGen = 0;
+      this._aiGen = 0;
+
       // Cache
       this._cache = this._loadCache();
 
@@ -239,7 +243,7 @@
 
       setHTML(w, this._hasKey()
         ? UI.htmlMain(this.tab, this.showTs)
-        : UI.htmlSetup(this._hasKey()));
+        : UI.htmlSetup());
 
       sidebar.insertBefore(w, sidebar.firstChild);
 
@@ -322,6 +326,7 @@
     // Transcript Fetching
     // ─────────────────────────────────────────────────────────────────────────
     async _fetchTranscript() {
+      const gen = ++this._fetchGen;
       this.data = [];
       this._fetchMethod = '';
 
@@ -337,12 +342,17 @@
           this._waitFor.bind(this)
         );
 
+        // Discard stale results
+        if (gen !== this._fetchGen) return;
+
         this.data = data;
         this._fetchMethod = method;
         this._renderTab();
         this._startSync();
         await this._detectSponsors();
       } catch (e) {
+        // Discard stale errors
+        if (gen !== this._fetchGen) return;
         console.error('[YT AI] All methods failed:', e.message);
         if (bodyEl) {
           UI.setBodyEl(bodyEl, `
@@ -569,9 +579,10 @@
           this._fetchTranscript();
         },
         onSLangChange: (value) => {
+          const oldCacheKey = this._cacheKey(); // compute BEFORE changing language
           this._setSLang(value);
-          delete this._cache[this._cacheKey()];
-          delete this._cache[this._cacheKey() + '__model'];
+          delete this._cache[oldCacheKey];
+          delete this._cache[oldCacheKey + '__model'];
           const fb = this._wrapper.querySelector('#ytai-lang-feedback');
           if (fb) {
             fb.classList.add('show');
@@ -601,6 +612,7 @@
     // AI Summary
     // ─────────────────────────────────────────────────────────────────────────
     async _callGroq() {
+      const gen = ++this._aiGen;
       const bodyEl = this._wrapper?.querySelector('#ytai-body');
       const setBody = (html) => UI.setBodyEl(bodyEl, html);
 
@@ -614,7 +626,13 @@
           setBody
         );
 
-        if (!result) return; // Retry in progress
+        // Discard stale results
+        if (gen !== this._aiGen) return;
+
+        if (!result) {
+          UI.setBodyEl(bodyEl, '<div class="ytai-error">No result from AI. Please try again.</div>');
+          return;
+        }
 
         const ck = this._cacheKey();
         this._cache[ck] = {
@@ -626,6 +644,8 @@
 
         UI.setBodyEl(bodyEl, UI.paintSummary(result, result.model));
       } catch (e) {
+        // Discard stale errors
+        if (gen !== this._aiGen) return;
         console.error('[YT AI]', e);
         UI.setBodyEl(bodyEl, `<div class="ytai-error">AI error: ${escapeHTML(e.message)}</div>`);
       }

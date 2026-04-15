@@ -3,13 +3,15 @@
   'use strict';
 
   const CONSTANTS = window.YTAI?.CONSTANTS;
+  const UTILS = window.YTAI?.UTILS;
 
-  if (!CONSTANTS) {
-    console.error('[YTAI Groq] YTAI.CONSTANTS not loaded. Ensure constants.js is loaded first.');
+  if (!CONSTANTS || !UTILS) {
+    console.error('[YTAI Groq] Dependencies missing. Ensure constants.js is loaded first.');
     return;
   }
 
   const { GROQ_URL, LANGUAGES, SVG } = CONSTANTS;
+  const { selectGroqModel } = UTILS;
 
   // ───────────────────────────────────────────────────────────────────────────
   // Promisified GM_xmlhttpRequest
@@ -94,7 +96,7 @@ Rules:
   // Summary Generation (single call, no retry)
   // ───────────────────────────────────────────────────────────────────────────
   const callSummary = async (apiKey, transcriptText, channelName, slValue) => {
-    const model = window.YTAI.UTILS.selectGroqModel(transcriptText.length);
+    const model = selectGroqModel(transcriptText.length);
     const systemPrompt = buildSummaryPrompt(channelName, slValue, transcriptText.length);
 
     const res = await request({
@@ -123,6 +125,11 @@ Rules:
       err.status = 429;
       err.retryAfter = parseInt((res.responseHeaders || '').match(/retry-after:\s*(\d+)/i)?.[1] || '60');
       throw err;
+    }
+
+    // Other HTTP errors
+    if (res.status >= 400) {
+      throw new Error(`Groq API error: HTTP ${res.status} ${res.statusText || ''}`);
     }
 
     const resp = JSON.parse(res.responseText);
@@ -258,18 +265,21 @@ Rules:
       try {
         return await callSummary(apiKey, transcriptText, channelName, slValue);
       } catch (e) {
-        attempt++; // only increment on failure
-
-        // Rate limit: show countdown then retry (doesn't count as additional attempt)
-        if (e.status === 429 && attempt < MAX_ATTEMPTS) {
-          const delay = Math.min(e.retryAfter || 60, 90);
-          for (let i = delay; i > 0; i--) {
-            setBodyFn(`<div class="ytai-retry-bar">Rate limit — retrying in ${i}s…</div>`);
-            await new Promise(r => setTimeout(r, 1000));
+        // Rate limit: show countdown then retry (does NOT count as attempt)
+        if (e.status === 429) {
+          if (attempt < MAX_ATTEMPTS - 1) { // allow rate-limit retries within budget
+            const delay = Math.min(e.retryAfter || 60, 90);
+            for (let i = delay; i > 0; i--) {
+              setBodyFn(`<div class="ytai-retry-bar">Rate limit — retrying in ${i}s…</div>`);
+              await new Promise(r => setTimeout(r, 1000));
+            }
+            continue;
           }
-          continue;
+          throw e; // no more retries left
         }
-        // Other errors: wait briefly then retry
+
+        // Other errors: count toward attempt budget
+        attempt++;
         if (attempt < MAX_ATTEMPTS) {
           await new Promise(r => setTimeout(r, attempt * 5000));
           continue;

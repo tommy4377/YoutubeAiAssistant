@@ -167,16 +167,20 @@
   // ───────────────────────────────────────────────────────────────────────────
   // Seekbar Overlay
   // ───────────────────────────────────────────────────────────────────────────
+  let _currentSeekbarObserver = null;
+
   const getProgressBar = () => doc.querySelector('.ytp-progress-bar');
 
-  const paintSeekbarSegments = (segments, duration, fmtTimeFn) => {
+  const paintSeekbarSegments = (segments, duration, fmtTimeFn, _retryCount = 0) => {
     removeSeekbarOverlay();
     if (!segments?.length || !duration) return null;
 
     const bar = getProgressBar();
     if (!bar) {
-      // Retry after delay
-      setTimeout(() => paintSeekbarSegments(segments, duration, fmtTimeFn), 1500);
+      // Retry after delay (max 5 retries)
+      if (_retryCount < 5) {
+        setTimeout(() => paintSeekbarSegments(segments, duration, fmtTimeFn, _retryCount + 1), 1500);
+      }
       return null;
     }
 
@@ -203,8 +207,12 @@
 
     bar.appendChild(overlay);
 
-    // Return observer for re-attachment on DOM changes
-    return attachSeekbarObserver(bar, segments, duration, fmtTimeFn);
+    // Disconnect any existing observer before creating a new one
+    if (_currentSeekbarObserver) {
+      _currentSeekbarObserver.disconnect();
+    }
+    _currentSeekbarObserver = attachSeekbarObserver(bar, segments, duration, fmtTimeFn);
+    return _currentSeekbarObserver;
   };
 
   const removeSeekbarOverlay = () => {
@@ -214,6 +222,8 @@
   const attachSeekbarObserver = (bar, segments, duration, fmtTimeFn) => {
     const observer = new MutationObserver(() => {
       if (!doc.getElementById('ytai-segment-overlay') && segments.length) {
+        // Disconnect this observer to prevent duplicate triggers
+        observer.disconnect();
         setTimeout(() => paintSeekbarSegments(segments, duration, fmtTimeFn), 300);
       }
     });
@@ -224,6 +234,9 @@
   const detachSeekbarObserver = (observer) => {
     if (observer) {
       observer.disconnect();
+    }
+    if (_currentSeekbarObserver === observer) {
+      _currentSeekbarObserver = null;
     }
   };
 
