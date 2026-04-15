@@ -594,6 +594,9 @@
         onTLangChange: (value) => {
           this._setTLang(value);
           this.data = [];
+          if (this.tab === 'settings') {
+            this.tab = this._prevTab || 'transcript';
+          }
           this._fetchTranscript();
         },
         onSLangChange: (value) => {

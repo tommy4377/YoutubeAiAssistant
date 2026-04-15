@@ -16,13 +16,13 @@
 // @connect      googlevideo.com
 // @noframes
 // @run-at       document-start
-// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/constants.js?v=5
-// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/styles.js?v=5
-// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/transcript.js?v=5
-// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/groq.js?v=5
-// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/sponsor.js?v=5
-// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/ui.js?v=5
-// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/main.js?v=5
+// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/constants.js?v=6
+// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/styles.js?v=6
+// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/transcript.js?v=6
+// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/groq.js?v=6
+// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/sponsor.js?v=6
+// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/ui.js?v=6
+// @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/main.js?v=6
 // ==/UserScript==
 
 // All logic loaded via @require modules. See /modules/ directory for source.

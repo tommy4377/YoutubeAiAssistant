@@ -79,6 +79,17 @@
             (aiLabel && simpleText.includes(aiLabel));
         });
       }
+
+      // 4. Use YouTube translation (tlang) for machine-translated captions
+      if (!targetTrack) {
+        const base = tracks.find(t => t.languageCode === 'en' && t.isTranslatable && t.baseUrl)
+                   || tracks.find(t => t.isTranslatable && t.baseUrl)
+                   || tracks.find(t => t.baseUrl);
+        if (base) {
+          targetTrack = { ...base, baseUrl: base.baseUrl + `&tlang=${encodeURIComponent(tLang)}` };
+          console.log(`[YT AI] Using translation: ${base.languageCode} → ${tLang}`);
+        }
+      }
     }
 
     if (!targetTrack) targetTrack = tracks.find(t => t.languageCode === 'en');
