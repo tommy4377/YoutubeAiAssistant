@@ -104,20 +104,19 @@
     }
 
     _getTLang() {
-      return win.localStorage.getItem(KEY_T_LANG) ?? 'native';
+      return GM_getValue(KEY_T_LANG, 'native');
     }
 
     _getSLang() {
-      return win.localStorage.getItem(KEY_S_LANG) ?? 'native';
+      return GM_getValue(KEY_S_LANG, 'native');
     }
 
-    async _setTLang(v) {
-      win.localStorage.setItem(KEY_T_LANG, v);
-      return Promise.resolve();
+    _setTLang(v) {
+      GM_setValue(KEY_T_LANG, v);
     }
 
     _setSLang(v) {
-      win.localStorage.setItem(KEY_S_LANG, v);
+      GM_setValue(KEY_S_LANG, v);
     }
 
     _cacheKey() {
@@ -564,10 +563,9 @@
           GM_setValue(KEY_API, '');
           this.init();
         },
-        onTLangChange: async (value) => {
-          await this._setTLang(value);
+        onTLangChange: (value) => {
+          this._setTLang(value);
           this.data = [];
-          await Promise.resolve(); // Ensure localStorage flush
           this._fetchTranscript();
         },
         onSLangChange: (value) => {
@@ -579,6 +577,8 @@
             fb.classList.add('show');
             setTimeout(() => fb.classList.remove('show'), 3000);
           }
+          // Re-render summary in new language if currently on AI tab
+          if (this.tab === 'ai') this._renderSummary();
         },
         onSkipToggle: (type, checked) => {
           this._setSkipType(type, checked);
