@@ -233,9 +233,12 @@ Rules:
         }),
       });
 
-      // Log 429 warnings for sponsor detection
+      // 429 — throw so caller can handle (don't cache empty results)
       if (res.status === 429) {
-        console.warn('[YT AI] Sponsor detection rate limited (429)');
+        const err = new Error('Rate limit exceeded');
+        err.status = 429;
+        err.retryAfter = parseInt((res.responseHeaders || '').match(/retry-after:\s*(\d+)/i)?.[1] || '60');
+        throw err;
       }
 
       const resp = JSON.parse(res.responseText);

@@ -144,23 +144,76 @@
     console.log('[YT AI] Sponsor detection: running 2 sequential calls…');
 
     // First 2 calls - sequential (queued by groq.js with 2s gap)
-    const r0 = await GROQ.callSponsor(apiKey, transcriptJson, model);
-    const r1 = await GROQ.callSponsor(apiKey, transcriptJson, model);
+    // Wrap in try/catch so 429s don't poison the results
+    let r0 = null, r1 = null;
+    try {
+      r0 = await GROQ.callSponsor(apiKey, transcriptJson, model);
+    } catch (e) {
+      if (e.status === 429) {
+        console.warn('[YT AI] Sponsor call #1 rate limited (429)');
+      } else {
+        console.warn('[YT AI] Sponsor call #1 failed:', e.message);
+      }
+    }
 
-    console.log('[YT AI] Raw sponsor results:', [r0.length, r1.length]);
+    try {
+      r1 = await GROQ.callSponsor(apiKey, transcriptJson, model);
+    } catch (e) {
+      if (e.status === 429) {
+        console.warn('[YT AI] Sponsor call #2 rate limited (429)');
+      } else {
+        console.warn('[YT AI] Sponsor call #2 failed:', e.message);
+      }
+    }
 
-    // Check agreement between first 2 calls
+    // Collect successful results
+    const successful = [];
+    if (r0 !== null) successful.push(r0);
+    if (r1 !== null) successful.push(r1);
+
+    console.log('[YT AI] Raw sponsor results:', [r0?.length ?? 'failed', r1?.length ?? 'failed']);
+
+    // If all calls failed, return empty WITHOUT caching
+    if (successful.length === 0) {
+      console.warn('[YT AI] Sponsor detection: all calls failed, returning empty (not cached)');
+      return [];
+    }
+
+    // If only 1 successful call, use it directly (no vote needed)
+    if (successful.length === 1) {
+      const segments = successful[0];
+      const c = loadCache();
+      c[videoId] = segments;
+      const keys = Object.keys(c);
+      if (keys.length > SPONSOR_CACHE_MAX) {
+        keys.slice(0, keys.length - SPONSOR_CACHE_MAX).forEach(k => delete c[k]);
+      }
+      saveCache(c);
+      console.log(`[YT AI] Sponsor detection: ${segments.length} segment(s) from single call (cached)`);
+      return segments;
+    }
+
+    // 2+ successful calls — check agreement and possibly add tiebreaker
     const agreement = computeAgreement(r0, r1);
     console.log(`[YT AI] Sponsor agreement: ${Math.round(agreement * 100)}%`);
 
-    let results = [r0, r1];
+    let results = successful;
 
     // If low agreement, add 3rd tiebreaker call
     if (agreement < 0.5) {
       console.log('[YT AI] Sponsor detection: low agreement, running tiebreaker call…');
-      const r2 = await GROQ.callSponsor(apiKey, transcriptJson, model);
-      results.push(r2);
-      console.log('[YT AI] Tiebreaker result:', r2.length);
+      try {
+        const r2 = await GROQ.callSponsor(apiKey, transcriptJson, model);
+        results.push(r2);
+        console.log('[YT AI] Tiebreaker result:', r2.length);
+      } catch (e) {
+        if (e.status === 429) {
+          console.warn('[YT AI] Sponsor tiebreaker rate limited (429), using 2-call result');
+        } else {
+          console.warn('[YT AI] Sponsor tiebreaker failed:', e.message);
+        }
+        // Continue with 2-call majority vote
+      }
     }
 
     const segments = majorityVote(results);
