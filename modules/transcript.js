@@ -14,6 +14,34 @@
   const { LANGUAGES } = CONSTANTS;
 
   // ───────────────────────────────────────────────────────────────────────────
+  // Unified GM_xmlhttpRequest helper (bypasses YouTube page-level rate limits)
+  // ───────────────────────────────────────────────────────────────────────────
+  const gmRequest = (method, url, body = null) => new Promise((resolve, reject) => {
+    GM_xmlhttpRequest({
+      method,
+      url,
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      data: body,
+      responseType: 'text',
+      onload: (res) => {
+        if (res.status >= 200 && res.status < 300) {
+          try {
+            const json = JSON.parse(res.responseText);
+            resolve(json);
+          } catch (e) {
+            resolve(res.responseText);
+          }
+        } else {
+          console.warn(`[YT AI] HTTP ${res.status} from ${url.slice(0, 60)}...`);
+          reject(new Error(`HTTP ${res.status}`));
+        }
+      },
+      onerror: () => reject(new Error('Network error')),
+      ontimeout: () => reject(new Error('Request timed out')),
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
   // Method A: Player API (Primary)
   // ───────────────────────────────────────────────────────────────────────────
   const fetchPlayerAPI = async (videoId, tLang) => {
@@ -33,20 +61,12 @@
 
     let playerData;
     try {
-      const res = await win.fetch(
-        `https://www.youtube.com/youtubei/v1/player${apiKey ? `?key=${apiKey}` : ''}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'omit',
-          body: JSON.stringify({
-            context: androidContext,
-            videoId: videoId,
-          }),
-        }
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      playerData = await res.json();
+      const url = `https://www.youtube.com/youtubei/v1/player${apiKey ? `?key=${apiKey}` : ''}`;
+      const body = JSON.stringify({
+        context: androidContext,
+        videoId: videoId,
+      });
+      playerData = await gmRequest('POST', url, body);
     } catch (e) {
       throw new Error(`Player API request failed: ${e.message}`);
     }
@@ -116,26 +136,12 @@
       urlsToTry.push(subtitleUrl.replace(/&tlang=[^&]+/, ''));
     }
 
-    // Use GM_xmlhttpRequest to bypass YouTube's page-level rate limiting on translations
-    const gmFetch = (url) => new Promise((resolve, reject) => {
-      GM_xmlhttpRequest({
-        method: 'GET',
-        url,
-        responseType: 'text',
-        onload: (res) => {
-          if (res.status >= 200 && res.status < 300) resolve(res.responseText);
-          else reject(new Error(`HTTP ${res.status}`));
-        },
-        onerror: () => reject(new Error('Network error')),
-        ontimeout: () => reject(new Error('Request timed out')),
-      });
-    });
-
+    // Use unified GM helper to bypass YouTube's page-level rate limiting
     let rawText;
     let lastError;
     for (const url of urlsToTry) {
       try {
-        rawText = await gmFetch(url);
+        rawText = await gmRequest('GET', url);
         if (url !== urlsToTry[0]) {
           console.log('[YT AI] Translation failed, fell back to native track');
         }
