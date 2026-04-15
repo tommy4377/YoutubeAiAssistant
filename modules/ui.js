@@ -20,9 +20,8 @@
     SEG_TYPE_ENGAGEMENT,
     WIDGET_ID,
     FOOTER,
-    escapeHTML,
   } = CONSTANTS;
-  const { doc, setHTML } = UTILS;
+  const { doc, setHTML, escapeHTML } = UTILS;
 
   // ───────────────────────────────────────────────────────────────────────────
   // Time Formatting

@@ -30,7 +30,7 @@
     SEG_TYPE_ENGAGEMENT,
   } = CONSTANTS;
 
-  const { doc, win, findSidebar, setHTML } = UTILS;
+  const { doc, win, findSidebar, setHTML, escapeHTML } = UTILS;
 
   // ───────────────────────────────────────────────────────────────────────────
   // YTAIApp Class
@@ -350,7 +350,7 @@
             <div class="ytai-error">
               Transcript not available.<br>
               <small>Make sure the video has captions (CC) enabled.</small><br><br>
-              <small>${CONSTANTS.escapeHTML(e.message)}</small>
+              <small>${escapeHTML(e.message)}</small>
             </div>
           `);
         }
@@ -627,7 +627,7 @@
         UI.setBodyEl(bodyEl, UI.paintSummary(result, result.model));
       } catch (e) {
         console.error('[YT AI]', e);
-        UI.setBodyEl(bodyEl, `<div class="ytai-error">AI error: ${CONSTANTS.escapeHTML(e.message)}</div>`);
+        UI.setBodyEl(bodyEl, `<div class="ytai-error">AI error: ${escapeHTML(e.message)}</div>`);
       }
     }
 
