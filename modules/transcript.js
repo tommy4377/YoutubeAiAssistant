@@ -13,16 +13,14 @@
   const { win, doc } = UTILS;
   const { LANGUAGES } = CONSTANTS;
 
-  // Get GM_xmlhttpRequest from window.YTAI (exported by loader for reliability)
-  const GM_xmlhttpRequest = window.YTAI?.GM_xmlhttpRequest;
-  if (!GM_xmlhttpRequest) {
-    console.error('[YTAI Transcript] GM_xmlhttpRequest not available. Check userscript @grant directives.');
-  }
+  // Lazy accessor for GM_xmlhttpRequest (set by loader AFTER @require modules load)
+  const _gm = () => window.YTAI?.GM_xmlhttpRequest;
 
   // ───────────────────────────────────────────────────────────────────────────
   // Unified GM_xmlhttpRequest helper (bypasses YouTube page-level rate limits)
   // ───────────────────────────────────────────────────────────────────────────
   const gmRequest = (method, url, body = null, json = false) => new Promise((resolve, reject) => {
+    const GM_xmlhttpRequest = _gm();
     if (!GM_xmlhttpRequest) {
       reject(new Error('GM_xmlhttpRequest not available'));
       return;

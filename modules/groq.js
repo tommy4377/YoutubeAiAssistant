@@ -13,16 +13,14 @@
   const { GROQ_URL, LANGUAGES, SVG } = CONSTANTS;
   const { selectGroqModel } = UTILS;
 
-  // Get GM_xmlhttpRequest from window.YTAI (exported by loader for reliability)
-  const GM_xmlhttpRequest = window.YTAI?.GM_xmlhttpRequest;
-  if (!GM_xmlhttpRequest) {
-    console.error('[YTAI Groq] GM_xmlhttpRequest not available. Check userscript @grant directives.');
-  }
+  // Lazy accessor for GM_xmlhttpRequest (set by loader AFTER @require modules load)
+  const _gm = () => window.YTAI?.GM_xmlhttpRequest;
 
   // ───────────────────────────────────────────────────────────────────────────
   // Promisified GM_xmlhttpRequest
   // ───────────────────────────────────────────────────────────────────────────
   const request = (options) => new Promise((resolve, reject) => {
+    const GM_xmlhttpRequest = _gm();
     if (!GM_xmlhttpRequest) {
       reject(new Error('GM_xmlhttpRequest not available'));
       return;
