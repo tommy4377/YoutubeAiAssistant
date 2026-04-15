@@ -119,7 +119,7 @@
           <div class="ytai-settings-row">
             <div class="ytai-settings-desc">Your Groq key from Groq Console. Never shared.</div>
             <div class="ytai-key-row">
-              <input type="password" id="ytai-settings-key" class="ytai-input" value="${masked}"
+              <input type="password" id="ytai-settings-key" class="ytai-input" value="${escapeHTML(masked)}"
                 placeholder="Paste new key…" autocomplete="off" spellcheck="false">
               <button id="ytai-settings-save" class="ytai-btn-primary">Save</button>
             </div>

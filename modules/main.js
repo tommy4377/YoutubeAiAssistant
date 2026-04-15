@@ -70,6 +70,7 @@
       this._sponsorSegments = [];
       this._skipperAttached = false;
       this._skipListener = null;
+      this._videoEl = null; // Store video element reference for proper cleanup
       this._seekbarObserver = null;
 
       // Inject styles
@@ -199,12 +200,20 @@
         const el = fn();
         if (el) return resolve(el);
 
+        let resolved = false; // Bug 12 fix: prevent double resolve
+        const resolveOnce = (val) => {
+          if (!resolved) {
+            resolved = true;
+            resolve(val);
+          }
+        };
+
         let tid, toid;
         const obs = new MutationObserver(() => {
           const r = fn();
           if (r) {
             clear();
-            resolve(r);
+            resolveOnce(r);
           }
         });
 
@@ -218,13 +227,13 @@
           const r = fn();
           if (r) {
             clear();
-            resolve(r);
+            resolveOnce(r);
           }
         }, 300);
 
         toid = setTimeout(() => {
           clear();
-          resolve(fn() || null);
+          resolveOnce(fn() || null);
         }, timeout);
 
         try {
@@ -379,7 +388,7 @@
 
         if (segments.length > 0) {
           this._attachSkipper();
-          this._paintSeekbarSegments();
+          await this._paintSeekbarSegments();
         }
 
         if (this.tab === 'settings') {
@@ -395,6 +404,7 @@
       const video = doc.querySelector('video');
       if (!video) return;
 
+      this._videoEl = video; // Store reference for proper cleanup (Bug 5 fix)
       this._skipListener = SPONSOR.attachSkipper(
         video,
         this._sponsorSegments,
@@ -405,23 +415,31 @@
 
     _detachSkipper() {
       if (!this._skipperAttached) return;
-      const video = doc.querySelector('video');
-      SPONSOR.detachSkipper(video, this._skipListener);
+      // Use stored video reference, not fresh query (Bug 5 fix)
+      SPONSOR.detachSkipper(this._videoEl, this._skipListener);
+      this._videoEl = null;
       this._skipListener = null;
       this._skipperAttached = false;
     }
 
-    _paintSeekbarSegments() {
+    async _paintSeekbarSegments(retries = 0) {
       const video = doc.querySelector('video');
       if (!video?.duration) {
-        setTimeout(() => this._paintSeekbarSegments(), 1500);
+        // Retry with max 5 attempts (Bug 3 fix)
+        if (retries < 5) {
+          await new Promise(r => setTimeout(r, 1500));
+          return this._paintSeekbarSegments(retries + 1);
+        }
         return;
       }
 
-      this._seekbarObserver = SPONSOR.paintSeekbarSegments(
+      // Use async version with callback to track observer even on retry (Bug 2 fix)
+      this._seekbarObserver = await SPONSOR.paintSeekbarSegments(
         this._sponsorSegments,
         video.duration,
-        UI.fmtTime
+        UI.fmtTime,
+        0, // retryCount
+        (observer) => { this._seekbarObserver = observer; } // callback for retry case
       );
     }
 

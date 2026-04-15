@@ -257,7 +257,9 @@ Rules:
   // ───────────────────────────────────────────────────────────────────────────
   const callSummaryWithUI = async (apiKey, transcriptText, channelName, slValue, setBodyFn) => {
     const MAX_ATTEMPTS = 3;
+    const MAX_429_RETRIES = 2; // Max rate-limit countdowns allowed
     let attempt = 0;
+    let retries429 = 0;
 
     while (attempt < MAX_ATTEMPTS) {
       setBodyFn(`<div class="ytai-loading">${SVG.sparkles}<span>Analysing with AI${attempt > 0 ? ` (attempt ${attempt + 1})` : ''}…</span></div>`);
@@ -265,9 +267,10 @@ Rules:
       try {
         return await callSummary(apiKey, transcriptText, channelName, slValue);
       } catch (e) {
-        // Rate limit: show countdown then retry (does NOT count as attempt)
+        // Rate limit: show countdown then retry (limited retries)
         if (e.status === 429) {
-          if (attempt < MAX_ATTEMPTS - 1) { // allow rate-limit retries within budget
+          if (retries429 < MAX_429_RETRIES) {
+            retries429++;
             const delay = Math.min(e.retryAfter || 60, 90);
             for (let i = delay; i > 0; i--) {
               setBodyFn(`<div class="ytai-retry-bar">Rate limit — retrying in ${i}s…</div>`);
@@ -275,7 +278,7 @@ Rules:
             }
             continue;
           }
-          throw e; // no more retries left
+          throw e; // no more 429 retries left
         }
 
         // Other errors: count toward attempt budget
@@ -288,6 +291,8 @@ Rules:
         throw e;
       }
     }
+    // Should never reach here, but explicit error for clarity (Bug 11 fix)
+    throw new Error('Max attempts exceeded');
   };
 
   // ───────────────────────────────────────────────────────────────────────────

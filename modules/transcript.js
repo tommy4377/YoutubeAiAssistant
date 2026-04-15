@@ -84,6 +84,17 @@
     if (!targetTrack) targetTrack = tracks.find(t => t.languageCode === 'en');
     if (!targetTrack) targetTrack = tracks[0];
 
+    // Ensure selected track has a baseUrl (Bug 6 fix)
+    if (!targetTrack?.baseUrl) {
+      // Try to find any track with a baseUrl
+      const fallbackTrack = tracks.find(t => t.baseUrl);
+      if (fallbackTrack) {
+        targetTrack = fallbackTrack;
+      } else {
+        throw new Error('No caption track with subtitle URL available');
+      }
+    }
+
     console.log(`[YT AI] Track selected: ${targetTrack.name?.simpleText || targetTrack.languageCode} (lang pref: ${tLang})`);
 
     const subtitleUrl = targetTrack.baseUrl.replace('&fmt=srv3', '');

@@ -171,7 +171,7 @@
 
   const getProgressBar = () => doc.querySelector('.ytp-progress-bar');
 
-  const paintSeekbarSegments = (segments, duration, fmtTimeFn, _retryCount = 0) => {
+  const paintSeekbarSegments = async (segments, duration, fmtTimeFn, _retryCount = 0, onObserverCreated = null) => {
     removeSeekbarOverlay();
     if (!segments?.length || !duration) return null;
 
@@ -179,7 +179,8 @@
     if (!bar) {
       // Retry after delay (max 5 retries)
       if (_retryCount < 5) {
-        setTimeout(() => paintSeekbarSegments(segments, duration, fmtTimeFn, _retryCount + 1), 1500);
+        await new Promise(r => setTimeout(r, 1500));
+        return paintSeekbarSegments(segments, duration, fmtTimeFn, _retryCount + 1, onObserverCreated);
       }
       return null;
     }
@@ -212,6 +213,12 @@
       _currentSeekbarObserver.disconnect();
     }
     _currentSeekbarObserver = attachSeekbarObserver(bar, segments, duration, fmtTimeFn);
+    
+    // Notify caller about the observer (even on retry)
+    if (onObserverCreated) {
+      onObserverCreated(_currentSeekbarObserver);
+    }
+    
     return _currentSeekbarObserver;
   };
 
