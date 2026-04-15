@@ -53,7 +53,7 @@
     const androidContext = {
       client: {
         clientName: 'ANDROID',
-        clientVersion: '19.44.39',
+        clientVersion: '20.10.38',
       },
     };
 
@@ -67,7 +67,7 @@
       const res = await win.fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'omit',
+        credentials: 'same-origin',
         body,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
