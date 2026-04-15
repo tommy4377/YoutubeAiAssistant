@@ -14,32 +14,6 @@
   const { LANGUAGES } = CONSTANTS;
 
   // ───────────────────────────────────────────────────────────────────────────
-  // GM_xmlhttpRequest helper for subtitle translation (bypasses page-level 429)
-  // ───────────────────────────────────────────────────────────────────────────
-  const gmFetch = (url) => new Promise((resolve, reject) => {
-    if (typeof GM_xmlhttpRequest === 'undefined') {
-      reject(new Error('GM_xmlhttpRequest not available'));
-      return;
-    }
-    GM_xmlhttpRequest({
-      method: 'GET',
-      url,
-      responseType: 'text',
-      timeout: 15000,
-      onload: (res) => {
-        if (res.status >= 200 && res.status < 300) {
-          resolve(res.responseText);
-        } else {
-          console.warn(`[YT AI] HTTP ${res.status} from ${url.slice(0, 60)}...`);
-          reject(new Error(`HTTP ${res.status}`));
-        }
-      },
-      onerror: () => reject(new Error('Network error')),
-      ontimeout: () => reject(new Error('Request timed out')),
-    });
-  });
-
-  // ───────────────────────────────────────────────────────────────────────────
   // Method A: Player API (Primary)
   // ───────────────────────────────────────────────────────────────────────────
   const fetchPlayerAPI = async (videoId, tLang) => {
@@ -59,17 +33,18 @@
 
     let playerData;
     try {
-      const url = `https://www.youtube.com/youtubei/v1/player${apiKey ? `?key=${apiKey}` : ''}`;
-      const body = JSON.stringify({
-        context: androidContext,
-        videoId: videoId,
-      });
-      const res = await win.fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body,
-      });
+      const res = await win.fetch(
+        `https://www.youtube.com/youtubei/v1/player${apiKey ? `?key=${apiKey}` : ''}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'omit',
+          body: JSON.stringify({
+            context: androidContext,
+            videoId: videoId,
+          }),
+        }
+      );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       playerData = await res.json();
     } catch (e) {
@@ -106,12 +81,14 @@
       }
 
       // 4. Use YouTube translation (tlang) for machine-translated captions
+      // Graceful fallback: if translation fails, retry without &tlang=
       if (!targetTrack) {
         const base = tracks.find(t => t.languageCode === 'en' && t.isTranslatable && t.baseUrl)
                    || tracks.find(t => t.isTranslatable && t.baseUrl)
                    || tracks.find(t => t.baseUrl);
         if (base) {
-          targetTrack = { ...base, baseUrl: base.baseUrl + `&tlang=${encodeURIComponent(tLang)}` };
+          const translatedUrl = base.baseUrl + `&tlang=${encodeURIComponent(tLang)}`;
+          targetTrack = { ...base, baseUrl: translatedUrl };
           console.log(`[YT AI] Using translation: ${base.languageCode} → ${tLang}`);
         }
       }
@@ -120,9 +97,8 @@
     if (!targetTrack) targetTrack = tracks.find(t => t.languageCode === 'en');
     if (!targetTrack) targetTrack = tracks[0];
 
-    // Ensure selected track has a baseUrl (Bug 6 fix)
+    // Ensure selected track has a baseUrl
     if (!targetTrack?.baseUrl) {
-      // Try to find any track with a baseUrl
       const fallbackTrack = tracks.find(t => t.baseUrl);
       if (fallbackTrack) {
         targetTrack = fallbackTrack;
@@ -141,19 +117,16 @@
       urlsToTry.push(subtitleUrl.replace(/&tlang=[^&]+/, ''));
     }
 
-    // Fetch subtitles: try win.fetch first, fall back to gmFetch for translation
     let rawText;
     let lastError;
     for (const url of urlsToTry) {
       try {
-        // Use win.fetch for native subtitles, gmFetch for translation (bypasses 429)
-        if (url.includes('&tlang=')) {
-          rawText = await gmFetch(url);
-        } else {
-          const res = await win.fetch(url, { credentials: 'omit' });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          rawText = await res.text();
+        const res = await win.fetch(url, { credentials: 'omit' });
+        if (!res.ok) {
+          lastError = new Error(`HTTP ${res.status}`);
+          continue;
         }
+        rawText = await res.text();
         if (url !== urlsToTry[0]) {
           console.log('[YT AI] Translation failed, fell back to native track');
         }
