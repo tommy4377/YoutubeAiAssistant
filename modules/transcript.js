@@ -16,15 +16,19 @@
   // ───────────────────────────────────────────────────────────────────────────
   // Unified GM_xmlhttpRequest helper (bypasses YouTube page-level rate limits)
   // ───────────────────────────────────────────────────────────────────────────
-  const gmRequest = (method, url, body = null, json = false) => new Promise((resolve, reject) => {
+  const gmRequest = (method, url, body = null, json = false, extraHeaders = {}) => new Promise((resolve, reject) => {
     if (typeof GM_xmlhttpRequest === 'undefined') {
       reject(new Error('GM_xmlhttpRequest not available'));
       return;
     }
+    const headers = {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...extraHeaders,
+    };
     GM_xmlhttpRequest({
       method,
       url,
-      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      headers,
       data: body,
       responseType: 'text',
       timeout: 15000, // 15 second timeout to prevent indefinite hangs
@@ -74,7 +78,10 @@
         context: androidContext,
         videoId: videoId,
       });
-      playerData = await gmRequest('POST', url, body, true);
+      playerData = await gmRequest('POST', url, body, true, {
+        'Origin': 'https://www.youtube.com',
+        'Referer': 'https://www.youtube.com/',
+      });
     } catch (e) {
       throw new Error(`Player API request failed: ${e.message}`);
     }
