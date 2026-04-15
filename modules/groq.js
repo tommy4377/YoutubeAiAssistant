@@ -18,6 +18,7 @@
   // ───────────────────────────────────────────────────────────────────────────
   const request = (options) => new Promise((resolve, reject) => {
     GM_xmlhttpRequest({
+      timeout: 90000, // 90 second timeout for AI inference
       ...options,
       onload: resolve,
       onerror: reject,
@@ -189,6 +190,11 @@ Rules:
           stream: false,
         }),
       });
+
+      // Log 429 warnings for sponsor detection
+      if (res.status === 429) {
+        console.warn('[YT AI] Sponsor detection rate limited (429)');
+      }
 
       const resp = JSON.parse(res.responseText);
       if (resp.error) return [];

@@ -150,6 +150,8 @@
 
         // Cleanup previous state
         this._stopSync();
+        clearTimeout(this._scrollTimer);
+        this._scrollTimer = null;
         doc.getElementById(WIDGET_ID)?.remove();
         this.data = [];
         this._wrapper = null;
@@ -594,6 +596,14 @@
         onTLangChange: (value) => {
           this._setTLang(value);
           this.data = [];
+          // Clear sponsor state since transcript changed
+          this._sponsorSegments = [];
+          this._detachSkipper();
+          this._detachSeekbarObserver();
+          // Invalidate AI summary cache (based on old transcript)
+          const cacheKey = this._cacheKey();
+          delete this._cache[cacheKey];
+          delete this._cache[cacheKey + '__model'];
           if (this.tab === 'settings') {
             this.tab = this._prevTab || 'transcript';
           }

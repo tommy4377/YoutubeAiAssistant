@@ -212,7 +212,7 @@
     if (_currentSeekbarObserver) {
       _currentSeekbarObserver.disconnect();
     }
-    _currentSeekbarObserver = attachSeekbarObserver(bar, segments, duration, fmtTimeFn);
+    _currentSeekbarObserver = attachSeekbarObserver(bar, segments, duration, fmtTimeFn, onObserverCreated);
     
     // Notify caller about the observer (even on retry)
     if (onObserverCreated) {
@@ -226,12 +226,13 @@
     doc.getElementById('ytai-segment-overlay')?.remove();
   };
 
-  const attachSeekbarObserver = (bar, segments, duration, fmtTimeFn) => {
+  const attachSeekbarObserver = (bar, segments, duration, fmtTimeFn, onObserverCreated = null) => {
     const observer = new MutationObserver(() => {
       if (!doc.getElementById('ytai-segment-overlay') && segments.length) {
         // Disconnect this observer to prevent duplicate triggers
         observer.disconnect();
-        setTimeout(() => paintSeekbarSegments(segments, duration, fmtTimeFn), 300);
+        // Recreate overlay with same params, propagate observer reference
+        setTimeout(() => paintSeekbarSegments(segments, duration, fmtTimeFn, 0, onObserverCreated), 300);
       }
     });
     observer.observe(bar, { childList: true });
