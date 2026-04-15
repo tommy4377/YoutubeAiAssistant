@@ -253,13 +253,14 @@ Rules:
     let attempt = 0;
 
     while (attempt < MAX_ATTEMPTS) {
-      attempt++;
-      setBodyFn(`<div class="ytai-loading">${SVG.sparkles}<span>Analysing with AI${attempt > 1 ? ` (attempt ${attempt})` : ''}…</span></div>`);
+      setBodyFn(`<div class="ytai-loading">${SVG.sparkles}<span>Analysing with AI${attempt > 0 ? ` (attempt ${attempt + 1})` : ''}…</span></div>`);
 
       try {
         return await callSummary(apiKey, transcriptText, channelName, slValue);
       } catch (e) {
-        // Rate limit: show countdown then retry
+        attempt++; // only increment on failure
+
+        // Rate limit: show countdown then retry (doesn't count as additional attempt)
         if (e.status === 429 && attempt < MAX_ATTEMPTS) {
           const delay = Math.min(e.retryAfter || 60, 90);
           for (let i = delay; i > 0; i--) {
