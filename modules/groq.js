@@ -91,83 +91,71 @@ Rules:
 - Return valid JSON only. No explanation, no markdown.`;
 
   // ───────────────────────────────────────────────────────────────────────────
-  // Summary Generation
+  // Summary Generation (single call, no retry)
   // ───────────────────────────────────────────────────────────────────────────
-  const callSummary = async (apiKey, transcriptText, channelName, slValue, attempt = 1, retryDelay = 0) => {
-    if (retryDelay > 0) {
-      await new Promise(r => setTimeout(r, retryDelay * 1000));
-    }
-
+  const callSummary = async (apiKey, transcriptText, channelName, slValue) => {
     const model = window.YTAI.UTILS.selectGroqModel(transcriptText.length);
     const systemPrompt = buildSummaryPrompt(channelName, slValue, transcriptText.length);
 
-    try {
-      const res = await request({
-        method: 'POST',
-        url: GROQ_URL,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        data: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Transcript from YouTube channel "${channelName}":\n\n${transcriptText}` },
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0.25,
-          max_completion_tokens: 2048,
-          stream: false,
-        }),
-      });
+    const res = await request({
+      method: 'POST',
+      url: GROQ_URL,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      data: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Transcript from YouTube channel "${channelName}":\n\n${transcriptText}` },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.25,
+        max_completion_tokens: 2048,
+        stream: false,
+      }),
+    });
 
-      // Rate limit handling
-      if (res.status === 429 && attempt <= 3) {
-        const ra = parseInt((res.responseHeaders || '').match(/retry-after:\s*(\d+)/i)?.[1] || '60');
-        const delay = Math.min(ra, 90);
-        console.warn(`[YT AI] 429 rate limit — retrying in ${delay}s`);
-        return callSummary(apiKey, transcriptText, channelName, slValue, attempt + 1, delay);
-      }
+    // 429 — throw with status so caller can detect and retry
+    if (res.status === 429) {
+      const err = new Error('Rate limit exceeded');
+      err.status = 429;
+      err.retryAfter = parseInt((res.responseHeaders || '').match(/retry-after:\s*(\d+)/i)?.[1] || '60');
+      throw err;
+    }
 
-      const resp = JSON.parse(res.responseText);
-      if (resp.error) {
-        throw new Error(resp.error.message || 'Groq API error');
-      }
+    const resp = JSON.parse(res.responseText);
+    if (resp.error) {
+      throw new Error(resp.error.message || 'Groq API error');
+    }
 
-      const raw = resp.choices?.[0]?.message?.content || '';
-      let j = parseJSON(raw);
+    const raw = resp.choices?.[0]?.message?.content || '';
+    let j = parseJSON(raw);
 
-      // Fallback parsing if standard JSON parse fails
-      if (!j) {
-        const sumMatch = raw.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
-        const kpBlock = raw.match(/"keypoints"\s*:\s*\[([\s\S]*?)\]/);
-        if (sumMatch && kpBlock) {
-          j = { summary: sumMatch[1].replace(/\\n/g, ' '), keypoints: [] };
-          for (const mm of kpBlock[1].matchAll(/"((?:[^"\\]|\\.)*)"/g)) {
-            j.keypoints.push(mm[1]);
-          }
+    // Fallback parsing if standard JSON parse fails
+    if (!j) {
+      const sumMatch = raw.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
+      const kpBlock = raw.match(/"keypoints"\s*:\s*\[([\s\S]*?)\]/);
+      if (sumMatch && kpBlock) {
+        j = { summary: sumMatch[1].replace(/\\n/g, ' '), keypoints: [] };
+        for (const mm of kpBlock[1].matchAll(/"((?:[^"\\]|\\.)*)"/g)) {
+          j.keypoints.push(mm[1]);
         }
       }
-
-      const normalized = normalizeResponse(j);
-      if (!normalized.keypoints.length) {
-        console.error('[YT AI] Raw Groq response:', raw);
-        throw new Error('Could not parse AI response. See console for details.');
-      }
-
-      return {
-        keypoints: normalized.keypoints,
-        summary: normalized.summary,
-        model,
-      };
-
-    } catch (e) {
-      if (attempt <= 3) {
-        return callSummary(apiKey, transcriptText, channelName, slValue, attempt + 1, attempt * 5);
-      }
-      throw e;
     }
+
+    const normalized = normalizeResponse(j);
+    if (!normalized.keypoints.length) {
+      console.error('[YT AI] Raw Groq response:', raw);
+      throw new Error('Could not parse AI response. See console for details.');
+    }
+
+    return {
+      keypoints: normalized.keypoints,
+      summary: normalized.summary,
+      model,
+    };
   };
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -258,34 +246,36 @@ Rules:
   });
 
   // ───────────────────────────────────────────────────────────────────────────
-  // UI-Aware Summary Call (with retry countdown)
+  // UI-Aware Summary Call (owns ALL retry logic)
   // ───────────────────────────────────────────────────────────────────────────
-  const callSummaryWithUI = async (apiKey, transcriptText, channelName, slValue, setBodyFn, attempt = 1, retryDelay = 0) => {
-    if (retryDelay > 0) {
-      let remaining = retryDelay;
-      const countdown = () => {
-        setBodyFn(`<div class="ytai-retry-bar">Rate limit — retrying in ${remaining}s…</div>`);
-        if (remaining > 0) {
-          remaining--;
-          setTimeout(countdown, 1000);
-        } else {
-          callSummaryWithUI(apiKey, transcriptText, channelName, slValue, setBodyFn, attempt);
+  const callSummaryWithUI = async (apiKey, transcriptText, channelName, slValue, setBodyFn) => {
+    const MAX_ATTEMPTS = 3;
+    let attempt = 0;
+
+    while (attempt < MAX_ATTEMPTS) {
+      attempt++;
+      setBodyFn(`<div class="ytai-loading">${SVG.sparkles}<span>Analysing with AI${attempt > 1 ? ` (attempt ${attempt})` : ''}…</span></div>`);
+
+      try {
+        return await callSummary(apiKey, transcriptText, channelName, slValue);
+      } catch (e) {
+        // Rate limit: show countdown then retry
+        if (e.status === 429 && attempt < MAX_ATTEMPTS) {
+          const delay = Math.min(e.retryAfter || 60, 90);
+          for (let i = delay; i > 0; i--) {
+            setBodyFn(`<div class="ytai-retry-bar">Rate limit — retrying in ${i}s…</div>`);
+            await new Promise(r => setTimeout(r, 1000));
+          }
+          continue;
         }
-      };
-      countdown();
-      return null;
-    }
-
-    setBodyFn(`<div class="ytai-loading">${SVG.sparkles}<span>Analysing with AI${attempt > 1 ? ` (attempt ${attempt})` : ''}…</span></div>`);
-
-    try {
-      const result = await callSummary(apiKey, transcriptText, channelName, slValue, attempt);
-      return result;
-    } catch (e) {
-      if (e.message?.includes('429') && attempt <= 3) {
-        return callSummaryWithUI(apiKey, transcriptText, channelName, slValue, setBodyFn, attempt + 1, Math.min(60, attempt * 15));
+        // Other errors: wait briefly then retry
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise(r => setTimeout(r, attempt * 5000));
+          continue;
+        }
+        // Exhausted retries
+        throw e;
       }
-      throw e;
     }
   };
 
@@ -301,7 +291,6 @@ Rules:
     buildSponsorPrompt,
     parseJSON,
     normalizeResponse,
-    // Expose for debugging
     request,
   };
 })();
