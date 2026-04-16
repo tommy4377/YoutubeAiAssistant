@@ -136,6 +136,38 @@ RULES:
 - Use the context timestamps to determine accurate start/end boundaries.
 - Look for transitions like "this video is sponsored by", "check out my Patreon", "don't forget to like and subscribe".`;
 
+  // BUG-16: Sanitize summary text - remove JSON artifacts and malformed bullets
+  const sanitizeSummary = (text) => {
+    if (!text || typeof text !== 'string') return '';
+
+    let s = text;
+
+    // Remove leading JSON structure artifacts
+    s = s.replace(/^\s*\],?\s*/m, '');
+    s = s.replace(/^\s*"summary"\s*[:\{]?\s*/im, '');
+    s = s.replace(/^\s*"keypoints"\s*[:\[]?\s*/im, '');
+    s = s.replace(/^\s*[,\{\[]\s*/m, '');
+
+    // Remove trailing JSON artifacts
+    s = s.replace(/\s*[,\}\]]\s*$/m, '');
+
+    // Remove markdown code fences
+    s = s.replace(/```[a-z]*\n?/gi, '');
+    s = s.replace(/```\s*$/g, '');
+
+    // Remove leading bullets from summaries (summaries should be prose, not lists)
+    s = s.replace(/^\s*[•\-\*]\s*/gm, '');
+
+    // Clean up stray colons at the start after artifact removal
+    s = s.replace(/^\s*:\s*/, '');
+
+    // Normalize whitespace
+    s = s.replace(/\n{3,}/g, '\n\n');
+    s = s.replace(/\s{2,}/g, ' ');
+
+    return s.trim();
+  };
+
   // ───────────────────────────────────────────────────────────────────────────
   // Summary Review
   // ───────────────────────────────────────────────────────────────────────────
@@ -163,7 +195,7 @@ RULES:
 
     return {
       keypoints: j.keypoints,
-      summary: j.summary || summary,
+      summary: sanitizeSummary(j.summary || summary),  // BUG-16: sanitize Gemini's summary
       model: `${model} → gemini-reviewed`
     };
   };
@@ -269,6 +301,7 @@ RULES:
     buildSummaryReviewPrompt,
     buildSponsorReviewPrompt,
     parseGeminiJSON,
-    buildSegmentContext
+    buildSegmentContext,
+    sanitizeSummary,  // BUG-16: export for UI module usage
   };
 })();

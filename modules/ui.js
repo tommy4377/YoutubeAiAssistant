@@ -251,7 +251,26 @@
     }
   };
 
+  // BUG-16: Final safety-net sanitization for summary display
+  const sanitizeSummary = (text) => {
+    if (!text || typeof text !== 'string') return '';
+    let s = text;
+    s = s.replace(/^\s*\],?\s*/m, '');
+    s = s.replace(/^\s*"summary"\s*[:\{]?\s*/im, '');
+    s = s.replace(/^\s*"keypoints"\s*[:\[]?\s*/im, '');
+    s = s.replace(/^\s*[,\{\[]\s*/m, '');
+    s = s.replace(/\s*[,\}\]]\s*$/m, '');
+    s = s.replace(/```[a-z]*\n?/gi, '');
+    s = s.replace(/```\s*$/g, '');
+    s = s.replace(/^\s*[•\-\*]\s*/gm, '');
+    s = s.replace(/^\s*:\s*/, '');
+    s = s.replace(/\n{3,}/g, '\n\n');
+    s = s.replace(/\s{2,}/g, ' ');
+    return s.trim();
+  };
+
   const paintSummary = (j, modelName = '') => {
+    const rawSummary = j?.summary || j?.riassunto || j?.sintesi || '';
     const normalized = {
       keypoints: Array.isArray(j?.keypoints)
         ? j.keypoints
@@ -260,7 +279,7 @@
           : Array.isArray(j?.punti_chiave)
             ? j.punti_chiave
             : [],
-      summary: j?.summary || j?.riassunto || j?.sintesi || '',
+      summary: sanitizeSummary(rawSummary),  // BUG-16: final sanitization
     };
 
     const badge = modelName

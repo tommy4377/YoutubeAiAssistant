@@ -194,19 +194,39 @@
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Data Reading
+    // Data Reading (async to wait for DOM updates - BUG-17)
     // ─────────────────────────────────────────────────────────────────────────
-    _readTitle() {
-      return doc.querySelector('h1.ytd-video-primary-info-renderer')?.textContent?.trim() ||
-        doc.querySelector('yt-formatted-string.ytd-video-primary-info-renderer')?.textContent?.trim() ||
+    async _readTitle() {
+      // BUG-17: Wait for title element to reflect current video
+      const titleEl = await this._waitFor(() => {
+        const el = doc.querySelector('h1.ytd-video-primary-info-renderer');
+        if (!el) return null;
+        const text = el.textContent?.trim();
+        // Ensure it's not empty and not the video ID itself
+        return (text && text !== this.videoId) ? el : null;
+      }, 3000);
+
+      if (titleEl) return titleEl.textContent.trim();
+
+      // Fallbacks
+      return doc.querySelector('yt-formatted-string.ytd-video-primary-info-renderer')?.textContent?.trim() ||
         doc.title?.replace(/ ?[-–|] ?YouTube$/, '').trim() ||
         this.videoId;
     }
 
-    _readChannel() {
-      return doc.querySelector('ytd-channel-name a')?.textContent?.trim() ||
-        doc.querySelector('.ytd-channel-name a')?.textContent?.trim() ||
-        'the speaker';
+    async _readChannel() {
+      // BUG-17: Wait for channel element with non-empty text
+      const channelEl = await this._waitFor(() => {
+        const el = doc.querySelector('ytd-channel-name a');
+        if (!el) return null;
+        const text = el.textContent?.trim();
+        return text ? el : null;
+      }, 3000);
+
+      if (channelEl) return channelEl.textContent.trim();
+
+      // Fallback
+      return doc.querySelector('.ytd-channel-name a')?.textContent?.trim() || 'the speaker';
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -340,14 +360,14 @@
           win.navigator.clipboard.writeText(text).catch(() => { });
           UI.flash(this._wrapper, '#ytai-copy', '#ytai-copy-lbl', 'Copied ✓', 'Copy');
         },
-        onDownload: () => {
+        onDownload: async () => {  // BUG-17: async to handle async download methods
           if (this.tab === 'ai') {
             if (!this._cache[this._cacheKey()]) return;
-            this._downloadSummary();
+            await this._downloadSummary();  // BUG-17: await async
             UI.flash(this._wrapper, '#ytai-dl', '#ytai-dl-lbl', 'Saved ✓', 'Export .md');
           } else {
             if (!this.data.length) return;
-            this._downloadTranscript();
+            await this._downloadTranscript();  // BUG-17: await async
             UI.flash(this._wrapper, '#ytai-dl', '#ytai-dl-lbl', 'Saved ✓', 'Download');
           }
         },
@@ -776,6 +796,10 @@
       }
 
       try {
+        // BUG-17: Wait for fresh channel/title data from DOM
+        const channelName = await this._readChannel();
+        const title = await this._readTitle();
+
         // OPT-03: cut at word boundary instead of mid-word
         const fullText = this.data.map(l => l.text).join(' ');
         const transcriptText = fullText.length > 90000
@@ -786,7 +810,7 @@
         const groqResult = await GROQ.callSummaryWithUI(
           groqKey,
           transcriptText,
-          this._readChannel(),
+          channelName,
           this._getSLang(),
           setBody
         );
@@ -867,7 +891,7 @@
       return `KEY POINTS\n\n${points}\n\nSUMMARY\n\n${summary}\n\n---\n${CONSTANTS.FOOTER}`;
     }
 
-    _summaryMarkdown() {
+    async _summaryMarkdown() {
       const j = this._cache[this._cacheKey()];
       if (!j) return '';
 
@@ -882,12 +906,12 @@
         summary: j?.summary || j?.riassunto || j?.sintesi || '',
       };
 
-      const title = this._readTitle() || this.videoId;
+      const title = (await this._readTitle()) || this.videoId;  // BUG-17: await async read
       const date = new Date().toISOString().slice(0, 10);
       const points = normalized.keypoints.map(p => `- ${UI.toCleanMd(p)}`).join('\n');
       const summary = UI.toCleanMdParagraph(normalized.summary);
 
-      return `# ${title}\n\n> Generated on ${date}\n\n## Key Points\n\n${points}\n\n## Summary\n\n${summary}\n\n---\n*${CONSTANTS.FOOTER}*\n`;
+      return `# ${title}\n\n> Generated on ${date}\n\n## Key Points\n\n${points}\n\n## Summary\n\n${summary}\n\n---\n*${CONSTANTS.FOOTER}*`;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -901,12 +925,15 @@
         .substring(0, 100) || this.videoId;
     }
 
-    _downloadTranscript() {
-      this._dl(this._transcriptText(), `${this._safeFilename(this._readTitle())}.txt`, 'text/plain');
+    async _downloadTranscript() {
+      const title = await this._readTitle();  // BUG-17: await async read
+      this._dl(this._transcriptText(), `${this._safeFilename(title)}.txt`, 'text/plain');
     }
 
-    _downloadSummary() {
-      this._dl(this._summaryMarkdown(), `${this._safeFilename(this._readTitle())}_summary.md`, 'text/markdown');
+    async _downloadSummary() {
+      const title = await this._readTitle();  // BUG-17: await async read
+      const content = await this._summaryMarkdown();  // BUG-17: await async method
+      this._dl(content, `${this._safeFilename(title)}_summary.md`, 'text/markdown');
     }
 
     _dl(content, filename, mime) {

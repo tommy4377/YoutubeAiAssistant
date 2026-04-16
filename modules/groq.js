@@ -300,6 +300,38 @@ Rules:
     }
   };
 
+  // BUG-16: Sanitize summary text - remove JSON artifacts and malformed bullets
+  const sanitizeSummary = (text) => {
+    if (!text || typeof text !== 'string') return '';
+
+    let s = text;
+
+    // Remove leading JSON structure artifacts
+    s = s.replace(/^\s*\],?\s*/m, '');                    // Leading `],`
+    s = s.replace(/^\s*"summary"\s*[:\{]?\s*/im, '');   // Leading `"summary":` or `"summary"{`
+    s = s.replace(/^\s*"keypoints"\s*[:\[]?\s*/im, ''); // Leading `"keypoints":` or `"keypoints"[`
+    s = s.replace(/^\s*[,\{\[]\s*/m, '');               // Leading `{`, `[`, `,`
+
+    // Remove trailing JSON artifacts
+    s = s.replace(/\s*[,\}\]]\s*$/m, '');                // Trailing `}`, `]`, `,`
+
+    // Remove markdown code fences
+    s = s.replace(/```[a-z]*\n?/gi, '');
+    s = s.replace(/```\s*$/g, '');
+
+    // Remove leading bullets from summaries (summaries should be prose, not lists)
+    s = s.replace(/^\s*[•\-\*]\s*/gm, '');
+
+    // Clean up stray colons at the start after artifact removal
+    s = s.replace(/^\s*:\s*/, '');
+
+    // Normalize whitespace
+    s = s.replace(/\n{3,}/g, '\n\n');
+    s = s.replace(/\s{2,}/g, ' ');
+
+    return s.trim();
+  };
+
   const normalizeResponse = (j) => ({
     keypoints: Array.isArray(j?.keypoints)
       ? j.keypoints
@@ -308,7 +340,7 @@ Rules:
         : Array.isArray(j?.punti_chiave)
           ? j.punti_chiave
           : [],
-    summary: j?.summary || j?.riassunto || j?.sintesi || '',
+    summary: sanitizeSummary(j?.summary || j?.riassunto || j?.sintesi || ''),
   });
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -367,5 +399,6 @@ Rules:
     parseJSON,
     normalizeResponse,
     request,
+    sanitizeSummary,  // BUG-16: export for UI module usage
   };
 })();
