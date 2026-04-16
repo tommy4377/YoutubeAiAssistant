@@ -313,11 +313,7 @@
             }
           }
         },
-        // Legacy callback
-        onSave: (key) => {
-          GM_setValue(KEY_API, key);
-          this.init();
-        },
+        // BUG-15 fix: removed legacy onSave callback that was interfering with per-key routing
       });
     }
 
@@ -704,26 +700,7 @@
             this._renderSettings();
           }
         },
-        // Legacy callbacks
-        onSaveKey: (key) => {
-          GM_setValue(KEY_API, key);
-          const inp = this._wrapper.querySelector('#ytai-settings-key-groq');
-          const statusEl = this._wrapper.querySelector('#ytai-key-status-groq');
-          const statusText = this._wrapper.querySelector('#ytai-key-status-text-groq');
-          const feedback = this._wrapper.querySelector('#ytai-save-feedback-groq');
-
-          if (inp) inp.value = '●●●●●●●●' + key.slice(-4);
-          if (statusEl) statusEl.className = 'ytai-key-status connected';
-          if (statusText) statusText.textContent = 'Connected';
-          if (feedback) {
-            feedback.classList.add('show');
-            setTimeout(() => feedback.classList.remove('show'), 2500);
-          }
-        },
-        onClearKey: () => {
-          GM_setValue(KEY_API, '');
-          this.init();
-        },
+        // BUG-15 fix: removed legacy onSaveKey/onClearKey callbacks
         onTLangChange: (value) => {
           this._setTLang(value);
           this.data = [];

@@ -335,7 +335,7 @@
   // Event Binding Helpers
   // ───────────────────────────────────────────────────────────────────────────
   const bindSetup = (wrapper, callbacks) => {
-    const { onSaveGroq, onSaveGemini, onSave } = callbacks;
+    const { onSaveGroq, onSaveGemini } = callbacks;  // BUG-15 fix: removed onSave from destructuring
     const groqInp = wrapper.querySelector('#ytai-key-groq');
     const geminiInp = wrapper.querySelector('#ytai-key-gemini');
     const saveBtn = wrapper.querySelector('#ytai-save');
@@ -344,13 +344,9 @@
       const groqKey = groqInp?.value?.trim() || '';
       const geminiKey = geminiInp?.value?.trim() || '';
 
-      if (onSave) {
-        // Legacy single callback
-        onSave(groqKey || geminiKey);
-      } else {
-        if (groqKey && onSaveGroq) onSaveGroq(groqKey);
-        if (geminiKey && onSaveGemini) onSaveGemini(geminiKey);
-      }
+      // BUG-15 fix: always use specific callbacks, removed legacy onSave branch
+      if (groqKey && onSaveGroq) onSaveGroq(groqKey);
+      if (geminiKey && onSaveGemini) onSaveGemini(geminiKey);
     };
 
     if (saveBtn) {
@@ -438,9 +434,7 @@
       onClearGroqKey,
       onSaveGeminiKey,
       onClearGeminiKey,
-      // Legacy support
-      onSaveKey,
-      onClearKey,
+      // BUG-15 fix: removed legacy onSaveKey/onClearKey
       onTLangChange,
       onSLangChange,
       onSkipToggle,
@@ -456,7 +450,7 @@
         const v = groqInp.value.trim();
         if (!v || v.startsWith('●')) return;
         if (onSaveGroqKey) onSaveGroqKey(v);
-        else if (onSaveKey) onSaveKey(v);
+        // BUG-15 fix: removed else if (onSaveKey) fallback
       });
 
       groqInp.addEventListener('keydown', (e) => {
@@ -464,7 +458,7 @@
           const v = e.currentTarget.value.trim();
           if (v && !v.startsWith('●')) {
             if (onSaveGroqKey) onSaveGroqKey(v);
-            else if (onSaveKey) onSaveKey(v);
+            // BUG-15 fix: removed else if (onSaveKey) fallback
           }
         }
         if (e.currentTarget.value.startsWith('●')) e.currentTarget.value = '';
@@ -480,7 +474,7 @@
     if (clearGroqBtn) {
       clearGroqBtn.addEventListener('click', () => {
         if (onClearGroqKey) onClearGroqKey();
-        else if (onClearKey) onClearKey();
+        // BUG-15 fix: removed else if (onClearKey) fallback
       });
     }
 
