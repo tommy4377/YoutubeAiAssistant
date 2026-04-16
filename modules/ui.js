@@ -22,7 +22,7 @@
     FOOTER,
     KEY_GEMINI_API,  // BUG-11 fix: import constant
   } = CONSTANTS;
-  const { doc, setHTML, escapeHTML } = UTILS;
+  const { doc, setHTML, escapeHTML, sanitizeKeypoints } = UTILS;
 
   // ───────────────────────────────────────────────────────────────────────────
   // Time Formatting
@@ -270,17 +270,27 @@
   };
 
   const paintSummary = (j, modelName = '') => {
-    const rawSummary = j?.summary || j?.riassunto || j?.sintesi || '';
-    const normalized = {
-      keypoints: Array.isArray(j?.keypoints)
-        ? j.keypoints
-        : Array.isArray(j?.key_points)
-          ? j.key_points
-          : Array.isArray(j?.punti_chiave)
-            ? j.punti_chiave
-            : [],
-      summary: sanitizeSummary(rawSummary),  // BUG-16: final sanitization
-    };
+    let rawSummary = j?.summary || j?.riassunto || j?.sintesi || '';
+    let rawKeypoints = Array.isArray(j?.keypoints)
+      ? j.keypoints
+      : Array.isArray(j?.key_points)
+        ? j.key_points
+        : Array.isArray(j?.punti_chiave)
+          ? j.punti_chiave
+          : [];
+
+    // Sanitize keypoints: filter JSON artifacts and clean individual entries
+    let keypoints = sanitizeKeypoints(rawKeypoints);
+
+    // Recover summary from keypoints if summary is empty but a long keypoint exists
+    if (!rawSummary || rawSummary.trim().length < 20) {
+      const longIdx = keypoints.findIndex(p => p.split(/\s+/).length > 50);
+      if (longIdx !== -1) {
+        rawSummary = keypoints.splice(longIdx, 1)[0];
+      }
+    }
+
+    const summary = sanitizeSummary(rawSummary);
 
     const badge = modelName
       ? `<div style="font-size:11px;color:#aaa;margin-bottom:12px;padding:6px 10px;background:rgba(255,255,255,.05);border-radius:6px;font-family:monospace">Model: <strong style="color:${C.accent}">${escapeHTML(modelName)}</strong></div>`
@@ -290,9 +300,9 @@
       <div class="ytai-summary">
         ${badge}
         <div class="ytai-section">${SVG.sparkles} Key Points</div>
-        <ul>${normalized.keypoints.map(p => `<li>${bold(escapeHTML(p))}</li>`).join('')}</ul>
+        <ul>${keypoints.map(p => `<li>${bold(escapeHTML(p))}</li>`).join('')}</ul>
         <div class="ytai-section">${SVG.lines} Summary</div>
-        <p>${bold(escapeHTML(normalized.summary))}</p>
+        <p>${bold(escapeHTML(summary))}</p>
       </div>`;
   };
 

@@ -196,6 +196,7 @@ Rules:
     }
 
     const normalized = normalizeResponse(j);
+    normalized.keypoints = UTILS?.sanitizeKeypoints?.(normalized.keypoints) || normalized.keypoints;
     if (!normalized.keypoints.length) {
       console.error('[YT AI] Raw Groq response:', raw);
       throw new Error('Could not parse AI response. See console for details.');

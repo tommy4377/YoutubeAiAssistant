@@ -32,7 +32,7 @@
     SEG_TYPE_ENGAGEMENT,
   } = CONSTANTS;
 
-  const { doc, win, findSidebar, setHTML, escapeHTML } = UTILS;
+  const { doc, win, findSidebar, setHTML, escapeHTML, sanitizeKeypoints } = UTILS;
 
   // ───────────────────────────────────────────────────────────────────────────
   // YTAIApp Class
@@ -873,44 +873,36 @@
       const j = this._cache[this._cacheKey()];
       if (!j) return '';
 
-      const normalized = {
-        keypoints: Array.isArray(j?.keypoints)
-          ? j.keypoints
-          : Array.isArray(j?.key_points)
-            ? j.key_points
-            : Array.isArray(j?.punti_chiave)
-              ? j.punti_chiave
-              : [],
-        summary: j?.summary || j?.riassunto || j?.sintesi || '',
-      };
+      const keypoints = sanitizeKeypoints(
+        Array.isArray(j?.keypoints) ? j.keypoints
+          : Array.isArray(j?.key_points) ? j.key_points
+          : Array.isArray(j?.punti_chiave) ? j.punti_chiave : []
+      );
+      const summary = j?.summary || j?.riassunto || j?.sintesi || '';
 
-      const points = normalized.keypoints.map(p => `• ${UI.toPlainText(p)}`).join('\n');
-      const summary = UI.toPlainText(normalized.summary);
+      const points = keypoints.map(p => `• ${UI.toPlainText(p)}`).join('\n');
+      const summaryText = UI.toPlainText(UI.sanitizeSummary(summary));
 
-      return `KEY POINTS\n\n${points}\n\nSUMMARY\n\n${summary}\n\n---\n${CONSTANTS.FOOTER}`;
+      return `KEY POINTS\n\n${points}\n\nSUMMARY\n\n${summaryText}\n\n---\n${CONSTANTS.FOOTER}`;
     }
 
     async _summaryMarkdown() {
       const j = this._cache[this._cacheKey()];
       if (!j) return '';
 
-      const normalized = {
-        keypoints: Array.isArray(j?.keypoints)
-          ? j.keypoints
-          : Array.isArray(j?.key_points)
-            ? j.key_points
-            : Array.isArray(j?.punti_chiave)
-              ? j.punti_chiave
-              : [],
-        summary: j?.summary || j?.riassunto || j?.sintesi || '',
-      };
+      const keypoints = sanitizeKeypoints(
+        Array.isArray(j?.keypoints) ? j.keypoints
+          : Array.isArray(j?.key_points) ? j.key_points
+          : Array.isArray(j?.punti_chiave) ? j.punti_chiave : []
+      );
+      const summary = j?.summary || j?.riassunto || j?.sintesi || '';
 
       const title = (await this._readTitle()) || this.videoId;  // BUG-17: await async read
       const date = new Date().toISOString().slice(0, 10);
-      const points = normalized.keypoints.map(p => `- ${UI.toCleanMd(p)}`).join('\n');
-      const summary = UI.toCleanMdParagraph(normalized.summary);
+      const points = keypoints.map(p => `- ${UI.toCleanMd(p)}`).join('\n');
+      const summaryText = UI.toCleanMdParagraph(UI.sanitizeSummary(summary));
 
-      return `# ${title}\n\n> Generated on ${date}\n\n## Key Points\n\n${points}\n\n## Summary\n\n${summary}\n\n---\n*${CONSTANTS.FOOTER}*`;
+      return `# ${title}\n\n> Generated on ${date}\n\n## Key Points\n\n${points}\n\n## Summary\n\n${summaryText}\n\n---\n*${CONSTANTS.FOOTER}*`;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

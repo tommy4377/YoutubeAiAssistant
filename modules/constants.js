@@ -132,6 +132,36 @@
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
+  const sanitizeKeypoint = (text) => {
+    if (typeof text !== 'string') return '';
+    let s = text;
+    // Collapse newlines (multi-line artifacts from broken JSON)
+    s = s.replace(/[\r\n]+/g, ' ');
+    // Remove JSON quote artifacts: comma/bracket + quote before capitalized word
+    s = s.replace(/([,\]])\s*"\s+(?=[A-ZÀ-Ÿ])/g, '$1 ');
+    // Remove leading JSON quote before capitalized word
+    s = s.replace(/^"\s*(?=[A-ZÀ-Ÿ])/i, '');
+    // Strip trailing JSON structural characters: ], }, "
+    s = s.replace(/\s*[\]\}"]+\s*$/, '');
+    // Strip trailing comma
+    s = s.replace(/,\s*$/, '');
+    // Normalize whitespace
+    s = s.replace(/\s{2,}/g, ' ');
+    return s.trim();
+  };
+
+  const JSON_TOKENS = new Set([
+    'summary', 'keypoints', 'key_points', 'punti_chiave', 'points',
+    ':', ',', 'null', 'true', 'false', '[]', '{}', ']', '[', '}', '{',
+  ]);
+
+  const sanitizeKeypoints = (points) => {
+    if (!Array.isArray(points)) return [];
+    return points
+      .map(p => sanitizeKeypoint(typeof p === 'string' ? p : String(p)))
+      .filter(p => p.length > 0 && !JSON_TOKENS.has(p.toLowerCase()) && !/^[\[\]\{\}:,."'`\s]+$/.test(p));
+  };
+
   // ───────────────────────────────────────────────────────────────────────────
   // Shadow DOM Helpers
   // ───────────────────────────────────────────────────────────────────────────
@@ -201,5 +231,7 @@
     selectGroqModel,
     querySelectorShadow,
     findSidebar,
+    sanitizeKeypoint,
+    sanitizeKeypoints,
   };
 })();

@@ -193,8 +193,9 @@ RULES:
       return groqResult;
     }
 
+    const cleanKeypoints = UTILS?.sanitizeKeypoints?.(j.keypoints) || j.keypoints;
     return {
-      keypoints: j.keypoints,
+      keypoints: cleanKeypoints,
       summary: sanitizeSummary(j.summary || summary),  // BUG-16: sanitize Gemini's summary
       model: `${model} → gemini-reviewed`
     };
