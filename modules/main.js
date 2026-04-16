@@ -180,8 +180,9 @@
         // Build UI
         this._buildUI(sidebar);
 
-      // Fetch transcript if key exists
-      if (this._hasKey()) {
+      // Fetch transcript only if BOTH keys exist (not in setup mode)
+      // BUG-14 fix: prevent transcript overwriting setup UI
+      if (this._hasKey() && this._hasGeminiKey()) {
         await this._fetchTranscript();
       }
 
@@ -578,6 +579,9 @@
     _renderTranscript() {
       const bodyEl = this._wrapper?.querySelector('#ytai-body');
       if (!bodyEl || !this.data.length) return;
+
+      // BUG-14 safety: don't render transcript into setup screen
+      if (bodyEl.classList.contains('ytai-body--setup')) return;
 
       const html = UI.renderTranscript(this.data, this.showTs, UI.fmtTime);
       UI.setBodyEl(bodyEl, html);
