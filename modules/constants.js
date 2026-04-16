@@ -31,7 +31,7 @@
   // ───────────────────────────────────────────────────────────────────────────
   const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
   const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';  // OPT-01: using gemini-2.0-flash (stable)
-  const GEMINI_MODEL = 'gemini-3-flash-preview';
+  const GEMINI_MODEL = 'gemini-2.5-flash';
 
   const selectGroqModel = (len) => {
     if (len <= 11000) return 'llama-3.1-8b-instant';
