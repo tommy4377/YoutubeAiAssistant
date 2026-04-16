@@ -116,7 +116,7 @@ You will receive the AI's raw output containing keypoints and summary. Review an
 
 TASK:
 1. For each candidate segment: verify it is truly a sponsor read, self-promotion, or engagement call using the transcript context provided. Remove false positives.
-2. Adjust start/end timestamps if they are inaccurate (use the context timestamps as reference).
+2. Adjust start/end timestamps to include transition bridges (lead-in phrases like "But first...", "Before we continue...").
 3. Add any missed segments that should have been detected (only if clearly present in the context).
 4. Correct labels if wrong (e.g., a segment labeled "sponsor" that is actually "self_promo").
 
@@ -131,27 +131,43 @@ Return ONLY a raw JSON object: {"segments": [{start, end, label, type}]}
 - "label" should be the sponsor/product name if identifiable, otherwise the type description
 - If no valid segments remain, return: {"segments": []}
 
-CRITICAL FALSE POSITIVE REMOVAL RULES (remove segment if any apply):
-- Music, audio interludes, intro/outro music, background beats — these are NEVER "engagement", "sponsor", or "self_promo"
-- A casual/incidental "like and subscribe" mention while explaining actual content — this is NOT engagement
-- Any segment under 5 seconds duration — remove as too short to be a meaningful dedicated segment
-- Transitions, B-roll, or music-only periods without spoken call-to-action
+TRANSITION BRIDGES (adjust start timestamp):
+When the speaker uses transitional phrases to introduce a promotion, the segment MUST include the full bridge for smoother skipping:
+- "But first..." / "But before we get started..."
+- "Before we continue..." / "Before we dive in..."
+- "This video is made possible by..." / "This video is sponsored by..."
+- "I want to thank today's sponsor..." / "A quick word from our sponsor..."
+- "Real quick before we begin..."
+EXTEND the start timestamp to the beginning of the transition phrase, even if it precedes the actual product mention.
 
-ENGAGEMENT QUALIFICATION (must meet ALL):
-✓ The segment is a DEDICATED STANDALONE break where the EXCLUSIVE purpose is viewer engagement
-✓ The context shows the speaker STOPPED normal content to deliver this call-to-action
-✓ Contains explicit action words: "like and subscribe", "follow me on [platform]", "visit my website", "check out my Patreon/Merch", "comment below"
-✗ A single passing sentence within educational content is a FALSE POSITIVE
+REFINED ENGAGEMENT DETECTION:
+✓ Clear, intentional CTAs qualify: dedicated pitches to subscribe, follow on social, visit websites, join newsletters
+✓ Can be integrated into content flow — does NOT need to be a complete video stop
+✓ Must show clear intent with explicit action words AND context showing a deliberate push for viewer action
+✗ Brief, incidental mentions under 3-4 seconds during normal content are NOT engagement — remove these
+✗ Casual asides like "don't forget to like" while explaining content are NOT engagement
+
+MUSIC PRESERVATION (HIGHEST PRIORITY):
+- Music is CORE CONTENT and must NEVER be classified as any segment type
+- Background music, lo-fi beats, intro/outro music, musical transitions, audio interludes — ALL are content, not skippable
+- If a segment is primarily musical or contains music without a clear spoken advertisement, REMOVE IT entirely
+- When in doubt between classifying as music or a segment, ALWAYS choose to preserve as music/content
+
+CRITICAL REMOVAL RULES (remove segment if any apply):
+- ANY music or primarily musical content — remove immediately
+- Any segment under 5 seconds duration — remove as too short
+- Segments where the transcript shows only music, no spoken words
 
 VALID SEGMENT TYPES:
 - "sponsor": Paid promotion, "this video is sponsored by [brand]", product reviews with compensation
 - "self_promo": Creator promoting own channel, Patreon, merchandise, social accounts, upcoming content
-- "engagement": ONLY dedicated like/subscribe/follow/comment/visit segments — nothing else qualifies
+- "engagement": Clear, intentional CTAs with explicit action requests (can be integrated, not just standalone breaks)
 
 REVIEW CRITERIA:
-- Remove false positives aggressively. Better to miss a short CTA than interrupt actual content.
-- Use context timestamps to verify accurate boundaries.
-- If unsure, remove the segment. Conservative detection prevents user frustration.`;
+- Prioritize music preservation above all else — when uncertain, remove the segment
+- Extend start timestamps to include transition bridges for natural skip boundaries
+- Ignore brief mentions under 3-4 seconds, but keep clear intentional CTAs even if integrated
+- Better to miss a short CTA than incorrectly flag music or content`;
 
   // BUG-16: Sanitize summary text - remove JSON artifacts and malformed bullets
   const sanitizeSummary = (text) => {

@@ -121,9 +121,7 @@ ${pointsRule}
   const buildSponsorPrompt = () => `You are a YouTube video content analyzer. Given a transcript as an array of {t: seconds, s: text} objects, identify all non-content segments including:
 - Sponsored/ad reads by the presenter (type: "sponsor")
 - Self-promotion (channel, Patreon, merch, social links) (type: "self_promo")
-- Engagement calls — dedicated standalone segments asking viewers to "like and subscribe", "follow me on Instagram/TikTok", "visit my website", "comment below" (type: "engagement")
-
-IMPORTANT: To qualify as a segment, it must be a DEDICATED STANDALONE break in the content — not a passing mention within normal speech.
+- Engagement calls — clear, intentional pushes for viewer action like subscribing, following, visiting sites, or joining newsletters (type: "engagement")
 
 Return ONLY a raw JSON object in this exact format:
 {"segments": [{"start": 123, "end": 187, "label": "Sponsor name or description", "type": "sponsor"}]}
@@ -137,16 +135,27 @@ Rules:
 - "label" should be the sponsor/product name if identifiable, otherwise the type description.
 - Return valid JSON only. No explanation, no markdown.
 
-EXCLUSION RULES (never flag these as segments):
-- Music, audio interludes, intro/outro music, background beats — these are NEVER "engagement" content
-- A passing mention like "like this video" within normal educational/explanatory content
-- Transitions, B-roll, or visual-only content without a spoken call-to-action
-- Casual sign-offs like "thanks for watching" — NOT engagement unless actively asking for action
+TRANSITION BRIDGES (include the narrative start):
+When a speaker uses transitional phrases to introduce a promotion, the segment MUST start at the beginning of that phrase for smoother skips:
+- "But first..." / "But before we get started..."
+- "Before we continue..." / "Before we dive in..."
+- "This video is made possible by..." / "This video is sponsored by..."
+- "I want to thank today's sponsor..." / "A quick word from our sponsor..."
+- "Real quick before we begin..."
+EXAMPLE: If transcript shows "But first, let me tell you about Squarespace" at t=120, the sponsor segment starts at t=120, not when the product pitch begins.
 
-ENGAGEMENT QUALIFICATION:
-✓ MUST be a dedicated standalone segment where the ONLY purpose is asking for viewer action
-✓ MUST include explicit action words: "like and subscribe", "follow me on [platform]", "visit [website]", "check out my Patreon", "comment below"
-✗ A single sentence "please like this video" while explaining a topic is NOT engagement — it stays in normal content
+ENGAGEMENT DETECTION (refined rules):
+✓ Clear, intentional CTAs qualify: "Subscribe to the channel", "Follow me on Instagram", "Visit my website", "Join the newsletter", "Support on Patreon"
+✓ Can be integrated into content flow — does NOT need to be a complete video stop
+✓ Must contain explicit action words AND show clear intent to drive viewer action
+✗ Brief, incidental mentions under 3-4 seconds during normal content are NOT engagement
+✗ Single passing phrases like "don't forget to like" while explaining a topic are NOT engagement
+
+MUSIC PRESERVATION (STRICT RULE):
+- Music is CORE CONTENT and must NEVER be labeled as any segment type
+- Background music, lo-fi beats, intro/outro music, musical transitions, audio interludes — ALL are content, not skippable segments
+- If a segment is primarily musical or contains music without a clear spoken advertisement, EXCLUDE it entirely
+- This is the highest priority rule: when in doubt, preserve music
 
 MINIMUM SEGMENT LENGTH:
 - All detected segments must be at least 5 seconds long. Segments under 5 seconds are false positives and should not be returned.`;
