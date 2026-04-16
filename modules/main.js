@@ -419,6 +419,7 @@
       }
 
       try {
+        console.log('[YT AI] Starting transcript fetch...');
         const { data, method } = await TRANSCRIPT.fetchTranscript(
           this.videoId,
           this._getTLang(),
@@ -426,8 +427,12 @@
         );
 
         // Discard stale results
-        if (gen !== this._fetchGen) return;
+        if (gen !== this._fetchGen) {
+          console.log('[YT AI] Discarding stale transcript result, gen:', gen, 'current:', this._fetchGen);
+          return;
+        }
 
+        console.log('[YT AI] Transcript fetch successful, lines:', data.length, 'method:', method);
         this.data = data;
         this._fetchMethod = method;
         this._renderTab();
@@ -435,7 +440,10 @@
         await this._detectSponsors();
       } catch (e) {
         // Discard stale errors
-        if (gen !== this._fetchGen) return;
+        if (gen !== this._fetchGen) {
+          console.log('[YT AI] Discarding stale transcript error, gen:', gen, 'current:', this._fetchGen);
+          return;
+        }
         console.error('[YT AI] All methods failed:', e.message);
         if (bodyEl) {
           UI.setBodyEl(bodyEl, `
@@ -750,7 +758,8 @@
           if (this.tab === 'settings') {
             this.tab = this._prevTab || 'transcript';
           }
-          this._renderTab();
+          // NOTE: Do NOT call _renderTab() here - let _fetchTranscript handle UI updates
+          // _fetchTranscript will show "Fetching transcript..." and render when done
           this._fetchTranscript();
         },
         onSLangChange: (value) => {
