@@ -116,7 +116,7 @@ You will receive the AI's raw output containing keypoints and summary. Review an
 
 TASK:
 1. For each candidate segment: verify it is truly a sponsor read, self-promotion, or engagement call using the transcript context provided. Remove false positives.
-2. Adjust start/end timestamps to include transition bridges (lead-in phrases like "But first...", "Before we continue...").
+2. Adjust start/end timestamps with boundary buffering and transition bridges for human-like editing.
 3. Add any missed segments that should have been detected (only if clearly present in the context).
 4. Correct labels if wrong (e.g., a segment labeled "sponsor" that is actually "self_promo").
 
@@ -131,43 +131,50 @@ Return ONLY a raw JSON object: {"segments": [{start, end, label, type}]}
 - "label" should be the sponsor/product name if identifiable, otherwise the type description
 - If no valid segments remain, return: {"segments": []}
 
-TRANSITION BRIDGES (adjust start timestamp):
-When the speaker uses transitional phrases to introduce a promotion, the segment MUST include the full bridge for smoother skipping:
-- "But first..." / "But before we get started..."
-- "Before we continue..." / "Before we dive in..."
-- "This video is made possible by..." / "This video is sponsored by..."
-- "I want to thank today's sponsor..." / "A quick word from our sponsor..."
-- "Real quick before we begin..."
-EXTEND the start timestamp to the beginning of the transition phrase, even if it precedes the actual product mention.
+MUSIC IS SACRED (MANDATORY DISCARD RULE):
+- BEFORE confirming any segment, check if the text contains music cues: [Music], ♪, ♫, [Laughter with background beats], rhythmic patterns, instrumental markers
+- If ANY music indicator is present, DISCARD immediately — even if there's a slight self-promo during a music-heavy intro
+- When choosing between keeping music or skipping a 5-second mention, ALWAYS preserve the music
+- This rule is absolute: music content is never a skippable segment
 
-REFINED ENGAGEMENT DETECTION:
-✓ Clear, intentional CTAs qualify: dedicated pitches to subscribe, follow on social, visit websites, join newsletters
-✓ Can be integrated into content flow — does NOT need to be a complete video stop
-✓ Must show clear intent with explicit action words AND context showing a deliberate push for viewer action
-✗ Brief, incidental mentions under 3-4 seconds during normal content are NOT engagement — remove these
-✗ Casual asides like "don't forget to like" while explaining content are NOT engagement
+TRANSITION BRIDGES (Boundary Shifting Words):
+Look for specific phrases that signal content shifts and extend the start timestamp to the beginning of the sentence containing these words:
+- "But first..." / "But before we get started..." / "I'll tell you the secret in a moment, but first..."
+- "Speaking of..." / "That reminds me..." / "Quick break..."
+- "Before we get into..." / "Before we dive in..." / "Before we continue..."
+- "Thanks to..." / "This video is made possible by..." / "This episode is brought to you by..."
+- "Real quick..." / "Quick word..." / "A quick message..."
+The segment MUST start at the beginning of the sentence with these boundary-shifting words.
 
-MUSIC PRESERVATION (HIGHEST PRIORITY):
-- Music is CORE CONTENT and must NEVER be classified as any segment type
-- Background music, lo-fi beats, intro/outro music, musical transitions, audio interludes — ALL are content, not skippable
-- If a segment is primarily musical or contains music without a clear spoken advertisement, REMOVE IT entirely
-- When in doubt between classifying as music or a segment, ALWAYS choose to preserve as music/content
+ENGAGEMENT NUANCE (Quality over Quantity):
+✗ SKIP these external CTAs: "Go to my link in the description", "Sign up for my newsletter", "Join my Patreon for the extended cut", "Visit my website", "Follow me on Instagram for more"
+✓ KEEP integrated social proof: "As you can see in the comments...", "If you agree, hit like", "The community has been asking..."
+✗ NOT a skip candidate: If the CTA is mixed with factual explanation of the video topic
+✓ ONLY skip when the CTA is purely about driving traffic elsewhere with no educational value in that moment
+
+BOUNDARY BUFFERING (Generous with the End, Strict with the Start):
+- END timestamp: Subtract 1 second from the detected end time (end 1 second early)
+- Better to leave a bit of the ad than to cut into the first word of the next content segment
+- This ensures the user never misses the start of actual content
+- Example: If the ad ends at t=187, set end to t=186
+- START timestamp: Be strict — only include the boundary-shifting sentence, no earlier content
 
 CRITICAL REMOVAL RULES (remove segment if any apply):
-- ANY music or primarily musical content — remove immediately
+- ANY music or music-cue indicators in the text — remove immediately
 - Any segment under 5 seconds duration — remove as too short
-- Segments where the transcript shows only music, no spoken words
+- External CTAs that appear alongside educational content (mixed purpose)
+- Segments where the boundary is unclear — when uncertain, remove
 
 VALID SEGMENT TYPES:
 - "sponsor": Paid promotion, "this video is sponsored by [brand]", product reviews with compensation
 - "self_promo": Creator promoting own channel, Patreon, merchandise, social accounts, upcoming content
-- "engagement": Clear, intentional CTAs with explicit action requests (can be integrated, not just standalone breaks)
+- "engagement": Pure external CTAs with no educational value in that moment (not mixed with content)
 
 REVIEW CRITERIA:
-- Prioritize music preservation above all else — when uncertain, remove the segment
-- Extend start timestamps to include transition bridges for natural skip boundaries
-- Ignore brief mentions under 3-4 seconds, but keep clear intentional CTAs even if integrated
-- Better to miss a short CTA than incorrectly flag music or content`;
+- PRIORITY 1: Music preservation — discard any segment with music cues
+- PRIORITY 2: Boundary buffering — end 1 second early, start precisely at boundary-shifting words
+- PRIORITY 3: Engagement nuance — skip external traffic CTAs, keep integrated social proof
+- PRIORITY 4: When uncertain, remove the segment — human-like editing prioritizes content continuity`;
 
   // BUG-16: Sanitize summary text - remove JSON artifacts and malformed bullets
   const sanitizeSummary = (text) => {
