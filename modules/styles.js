@@ -8,12 +8,15 @@
     return;
   }
 
-  const { WIDGET_ID, C, SEG_COLORS } = CONSTANTS;
+  const { WIDGET_ID, C } = CONSTANTS;  // SEG_COLORS removed - applied inline in sponsor.js
 
   // ───────────────────────────────────────────────────────────────────────────
   // CSS Injection
   // ───────────────────────────────────────────────────────────────────────────
+  let _injected = false;  // Guard against multiple inject() calls
   const inject = () => {
+    if (_injected) return;
+    _injected = true;
     GM_addStyle(`
       #${WIDGET_ID} {
         background:${C.bgCard};
@@ -26,6 +29,7 @@
         display:flex;
         flex-direction:column;
         height:500px;
+        max-height:calc(100vh - 120px);  /* Responsive cap for small screens */
         width:100%;
         box-sizing:border-box;
         box-shadow:0 1px 2px rgba(0,0,0,.6),0 4px 12px rgba(0,0,0,.3);
