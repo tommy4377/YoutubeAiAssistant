@@ -362,9 +362,9 @@
         user-select:none;
       }
       #ytai-skip-toast {
-        position:fixed;
-        bottom:80px;
-        right:20px;
+        position:absolute;
+        bottom:54px;
+        right:16px;
         z-index:9999;
         background:${C.bgHeader};
         color:${C.text};

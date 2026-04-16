@@ -181,12 +181,9 @@
     toast.id = 'ytai-skip-toast';
     setHTML(toast, `⏭ Skipped <span style="color:${color}">${escapeHTML(label)}</span>`);
 
-    // Fix: Use body in normal mode, movie_player in fullscreen for proper positioning
-    const isFullscreen = !!doc.fullscreenElement || !!doc.webkitFullscreenElement;
-    const container = isFullscreen
-      ? (doc.getElementById('movie_player') || doc.querySelector('.html5-video-player') || doc.body)
-      : doc.body;
-    container.appendChild(toast);
+    // Fix: Append to player container (like skip prompt) so it positions inside video
+    const playerContainer = doc.getElementById('movie_player') || doc.querySelector('.html5-video-player') || doc.body;
+    playerContainer.appendChild(toast);
 
     setTimeout(() => {
       if (doc.getElementById('ytai-skip-toast') === toast) {
