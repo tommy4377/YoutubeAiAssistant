@@ -255,12 +255,13 @@ Rules:
       }
 
       return j.segments.filter(s =>
-        typeof s.start === 'number' && typeof s.end === 'number' && s.end > s.start
+        typeof s.start === 'number' && typeof s.end === 'number' && s.end > s.start &&
+        ['sponsor', 'self_promo', 'engagement'].includes(s.type)  // BUG-13 fix: validate type field
       );
     } catch (e) {
       if (e.status === 429) throw e;
       console.warn('[YT AI] Sponsor detection call failed:', e);
-      return [];
+      throw e;  // BUG-10 fix: throw all errors, don't cache empty results
     }
   };
 

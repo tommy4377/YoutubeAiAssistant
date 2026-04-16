@@ -64,6 +64,7 @@
       // Fetch generation counters (to cancel stale results)
       this._fetchGen = 0;
       this._aiGen = 0;
+      this._sponsorGen = 0;  // BUG-12: sponsor generation counter
 
       // Cache
       this._cache = this._loadCache();
@@ -179,10 +180,13 @@
         // Build UI
         this._buildUI(sidebar);
 
-        // Fetch transcript if key exists
-        if (this._hasKey()) {
-          await this._fetchTranscript();
-        }
+      // Fetch transcript if key exists
+      if (this._hasKey()) {
+        await this._fetchTranscript();
+      }
+
+      // Sponsor detection generation check
+      this._sponsorGen++;  // BUG-12: increment generation on init
       } finally {
         this._isIniting = false;  // BUG-04 fix: reset immediately without timeout
       }
@@ -423,12 +427,17 @@
     // Sponsor Detection
     // ─────────────────────────────────────────────────────────────────────────
     async _detectSponsors() {
+      const gen = this._sponsorGen;  // BUG-12: capture generation
       const groqKey = GM_getValue(KEY_API, '');
       const geminiKey = GM_getValue(KEY_GEMINI_API, '');
       if (!groqKey) return;
 
       try {
         const segments = await SPONSOR.detectSponsors(this.videoId, this.data, groqKey, geminiKey);
+
+        // BUG-12: discard stale results
+        if (gen !== this._sponsorGen) return;
+
         this._sponsorSegments = segments;
 
         if (segments.length > 0) {
@@ -440,6 +449,8 @@
           this._renderSettings();
         }
       } catch (e) {
+        // BUG-12: discard stale errors
+        if (gen !== this._sponsorGen) return;
         console.warn('[YT AI] Sponsor detection failed:', e);
       }
     }

@@ -20,6 +20,7 @@
     SEG_TYPE_ENGAGEMENT,
     WIDGET_ID,
     FOOTER,
+    KEY_GEMINI_API,  // BUG-11 fix: import constant
   } = CONSTANTS;
   const { doc, setHTML, escapeHTML } = UTILS;
 
@@ -140,7 +141,7 @@
     }
 
     const geminiMasked = config.hasGeminiKey
-      ? '●●●●●●●●' + GM_getValue('gemini_api_key', '').slice(-4)
+      ? '●●●●●●●●' + GM_getValue(KEY_GEMINI_API, '').slice(-4)  // BUG-11 fix: use constant instead of hardcoded string
       : '';
 
     return `

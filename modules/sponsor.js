@@ -68,6 +68,7 @@
       } else {
         console.warn('[YT AI] Sponsor call failed:', e.message);
       }
+      // BUG-10 fix: don't cache empty results on error - return without saving to cache
       return [];
     }
 
