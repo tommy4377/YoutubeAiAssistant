@@ -92,6 +92,9 @@
       .ytai-setup hr { width:100%; max-width:300px; border:none; border-top:1px solid ${C.borderSoft}; margin:0 0 14px; }
       .ytai-setup a { font-size:12px; color:${C.accent}; text-decoration:none; opacity:.8; transition:opacity .15s; }
       .ytai-setup a:hover { opacity:1; }
+      .ytai-setup-section { width:100%; max-width:300px; }
+      .ytai-setup-section h3 { margin:0 0 6px; font-size:15px; font-weight:500; color:${C.text}; }
+      .ytai-setup-section p { margin:0 0 12px; font-size:12px; color:${C.muted}; line-height:1.5; }
       .ytai-input {
         width:100%;
         max-width:300px;

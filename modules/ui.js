@@ -38,7 +38,27 @@
   // ───────────────────────────────────────────────────────────────────────────
   // HTML Generators
   // ───────────────────────────────────────────────────────────────────────────
-  const htmlSetup = () => {
+  const htmlSetup = (hasGroqKey, hasGeminiKey) => {
+    const groqSection = hasGroqKey ? '' : `
+      <div class="ytai-setup-section">
+        <h3>Groq API Key</h3>
+        <p>Enter your key for AI summaries with Llama models.</p>
+        <input type="password" id="ytai-key-groq" class="ytai-input" placeholder="Paste your Groq API key…" autocomplete="off" spellcheck="false">
+        <a href="https://console.groq.com/keys" target="_blank" style="font-size:12px;color:${C.accent}">Get a free key on Groq Console ↗</a>
+      </div>`;
+
+    const geminiSection = hasGeminiKey ? '' : `
+      <div class="ytai-setup-section" style="margin-top:20px;padding-top:20px;border-top:1px solid ${C.borderSoft}">
+        <h3>Gemini API Key</h3>
+        <p>Enter your key to enable AI review and enrichment.</p>
+        <input type="password" id="ytai-key-gemini" class="ytai-input" placeholder="Paste your Gemini API key…" autocomplete="off" spellcheck="false">
+        <a href="https://aistudio.google.com/app/apikey" target="_blank" style="font-size:12px;color:${C.accent}">Get a free key on Google AI Studio ↗</a>
+      </div>`;
+
+    const saveBtn = (!hasGroqKey || !hasGeminiKey) ? `
+      <button id="ytai-save" class="ytai-btn-primary" style="margin-top:20px">Save and continue</button>
+    ` : '';
+
     return `
       <div class="ytai-header">
         <div class="ytai-tab active" style="pointer-events:none">AI Assistant</div>
@@ -46,17 +66,14 @@
       <div class="ytai-body ytai-body--setup" id="ytai-body">
         <div class="ytai-setup">
           <div class="ytai-setup-icon">${SVG.bulb}</div>
-          <h3>Groq API Key</h3>
-          <p>Enter your key to enable transcripts and AI summaries with Llama models (Groq).</p>
-          <input type="password" id="ytai-key" class="ytai-input" placeholder="Paste your API key…" autocomplete="off" spellcheck="false">
-          <button id="ytai-save" class="ytai-btn-primary" style="margin-bottom:16px">Save and continue</button>
-          <hr>
-          <a href="https://console.groq.com/keys" target="_blank">Get a free key on Groq Console ↗</a>
+          ${groqSection}
+          ${geminiSection}
+          ${saveBtn}
         </div>
       </div>`;
   };
 
-  const htmlMain = (tab, showTs) => {
+  const htmlMain = (tab, showTs, geminiMissing = false) => {
     return `
       <div class="ytai-header">
         <div class="ytai-tab ${tab === 'transcript' ? 'active' : ''}" data-tab="transcript">Transcript</div>
@@ -69,7 +86,17 @@
         <button class="ytai-btn ${showTs ? 'on' : ''}" id="ytai-ts">${SVG.time} <span>Timestamps</span></button>
         <button class="ytai-btn" id="ytai-copy">${SVG.copy} <span id="ytai-copy-lbl">Copy</span></button>
         <button class="ytai-btn" id="ytai-dl">${SVG.download} <span id="ytai-dl-lbl">Download</span></button>
-        <button class="ytai-btn" id="ytai-settings">${SVG.gear}</button>
+        <button class="ytai-btn ${geminiMissing ? 'on' : ''}" id="ytai-settings">${SVG.gear}</button>
+      </div>`;
+  };
+
+  const htmlGeminiMissing = () => {
+    return `
+      <div class="ytai-error">
+        <strong>Gemini API Key Required</strong><br><br>
+        The AI Summary feature requires a Gemini API key for review and enrichment.<br><br>
+        <a id="ytai-gemini-setup-link" style="cursor:pointer;color:${C.accent};text-decoration:underline">Open Settings</a> to add your key, or get one free from
+        <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:${C.accent}">Google AI Studio ↗</a>
       </div>`;
   };
 
@@ -112,23 +139,44 @@
       segList = `<ul class="ytai-sponsor-segments">${items}</ul>`;
     }
 
+    const geminiMasked = config.hasGeminiKey
+      ? '●●●●●●●●' + GM_getValue('gemini_api_key', '').slice(-4)
+      : '';
+
     return `
       <div class="ytai-settings">
         <div class="ytai-settings-section">
-          <div class="ytai-settings-header">${SVG.key} API Key</div>
+          <div class="ytai-settings-header">${SVG.key} Groq API Key</div>
           <div class="ytai-settings-row">
             <div class="ytai-settings-desc">Your Groq key from Groq Console. Never shared.</div>
             <div class="ytai-key-row">
-              <input type="password" id="ytai-settings-key" class="ytai-input" value="${escapeHTML(masked)}"
+              <input type="password" id="ytai-settings-key-groq" class="ytai-input" value="${escapeHTML(masked)}"
                 placeholder="Paste new key…" autocomplete="off" spellcheck="false">
-              <button id="ytai-settings-save" class="ytai-btn-primary">Save</button>
+              <button id="ytai-settings-save-groq" class="ytai-btn-primary">Save</button>
             </div>
-            <div class="ytai-key-status ${hasKey ? 'connected' : 'disconnected'}" id="ytai-key-status">
+            <div class="ytai-key-status ${hasKey ? 'connected' : 'disconnected'}" id="ytai-key-status-groq">
               <span class="ytai-status-dot"></span>
-              <span id="ytai-key-status-text">${hasKey ? 'Connected' : 'Not configured'}</span>
-              <span class="ytai-save-feedback" id="ytai-save-feedback">${SVG.check} Saved</span>
+              <span id="ytai-key-status-text-groq">${hasKey ? 'Connected' : 'Not configured'}</span>
+              <span class="ytai-save-feedback" id="ytai-save-feedback-groq">${SVG.check} Saved</span>
             </div>
-            ${hasKey ? `<button id="ytai-settings-clear" class="ytai-btn-danger" style="margin-top:8px;width:fit-content">Remove key</button>` : ''}
+            ${hasKey ? `<button id="ytai-settings-clear-groq" class="ytai-btn-danger" style="margin-top:8px;width:fit-content">Remove key</button>` : ''}
+          </div>
+        </div>
+        <div class="ytai-settings-section">
+          <div class="ytai-settings-header">${SVG.key} Gemini API Key</div>
+          <div class="ytai-settings-row">
+            <div class="ytai-settings-desc">Your Gemini key from Google AI Studio. Used for AI review.</div>
+            <div class="ytai-key-row">
+              <input type="password" id="ytai-settings-key-gemini" class="ytai-input" value="${escapeHTML(geminiMasked)}"
+                placeholder="Paste new key…" autocomplete="off" spellcheck="false">
+              <button id="ytai-settings-save-gemini" class="ytai-btn-primary">Save</button>
+            </div>
+            <div class="ytai-key-status ${config.hasGeminiKey ? 'connected' : 'disconnected'}" id="ytai-key-status-gemini">
+              <span class="ytai-status-dot"></span>
+              <span id="ytai-key-status-text-gemini">${config.hasGeminiKey ? 'Connected' : 'Not configured'}</span>
+              <span class="ytai-save-feedback" id="ytai-save-feedback-gemini">${SVG.check} Saved</span>
+            </div>
+            ${config.hasGeminiKey ? `<button id="ytai-settings-clear-gemini" class="ytai-btn-danger" style="margin-top:8px;width:fit-content">Remove key</button>` : ''}
           </div>
         </div>
         <div class="ytai-settings-section">
@@ -150,7 +198,7 @@
           <div class="ytai-settings-header">${SVG.skip} Sponsor Skip</div>
           <div class="ytai-settings-row">
             ${toggleRows}
-            <div class="ytai-settings-desc" style="margin-top:4px">AI detects segments using triple-check majority vote (3 parallel calls).</div>
+            <div class="ytai-settings-desc" style="margin-top:4px">AI detects segments using Groq + Gemini review (1 call each).</div>
             ${segList}
             <button id="ytai-sponsor-redetect" class="ytai-btn-primary" style="margin-top:10px;width:fit-content">Re-detect</button>
           </div>
@@ -286,22 +334,35 @@
   // Event Binding Helpers
   // ───────────────────────────────────────────────────────────────────────────
   const bindSetup = (wrapper, callbacks) => {
-    const { onSave } = callbacks;
-    const inp = wrapper.querySelector('#ytai-key');
+    const { onSaveGroq, onSaveGemini, onSave } = callbacks;
+    const groqInp = wrapper.querySelector('#ytai-key-groq');
+    const geminiInp = wrapper.querySelector('#ytai-key-gemini');
     const saveBtn = wrapper.querySelector('#ytai-save');
 
-    if (saveBtn && inp) {
-      saveBtn.onclick = () => {
-        const v = inp.value.trim();
-        if (v) onSave(v);
-      };
-      inp.onkeydown = (e) => {
-        if (e.key === 'Enter') {
-          const v = inp.value.trim();
-          if (v) onSave(v);
-        }
-      };
+    const save = () => {
+      const groqKey = groqInp?.value?.trim() || '';
+      const geminiKey = geminiInp?.value?.trim() || '';
+
+      if (onSave) {
+        // Legacy single callback
+        onSave(groqKey || geminiKey);
+      } else {
+        if (groqKey && onSaveGroq) onSaveGroq(groqKey);
+        if (geminiKey && onSaveGemini) onSaveGemini(geminiKey);
+      }
+    };
+
+    if (saveBtn) {
+      saveBtn.onclick = save;
     }
+
+    [groqInp, geminiInp].forEach(inp => {
+      if (inp) {
+        inp.onkeydown = (e) => {
+          if (e.key === 'Enter') save();
+        };
+      }
+    });
   };
 
   const bindMain = (wrapper, callbacks) => {
@@ -372,6 +433,11 @@
 
   const bindSettings = (wrapper, callbacks) => {
     const {
+      onSaveGroqKey,
+      onClearGroqKey,
+      onSaveGeminiKey,
+      onClearGeminiKey,
+      // Legacy support
       onSaveKey,
       onClearKey,
       onTLangChange,
@@ -380,34 +446,73 @@
       onRedetect,
     } = callbacks;
 
-    // Save key
-    const saveBtn = wrapper.querySelector('#ytai-settings-save');
-    const keyInp = wrapper.querySelector('#ytai-settings-key');
+    // Save Groq key
+    const saveGroqBtn = wrapper.querySelector('#ytai-settings-save-groq');
+    const groqInp = wrapper.querySelector('#ytai-settings-key-groq');
 
-    if (saveBtn && keyInp) {
-      saveBtn.addEventListener('click', () => {
-        const v = keyInp.value.trim();
+    if (saveGroqBtn && groqInp) {
+      saveGroqBtn.addEventListener('click', () => {
+        const v = groqInp.value.trim();
         if (!v || v.startsWith('●')) return;
-        onSaveKey(v);
+        if (onSaveGroqKey) onSaveGroqKey(v);
+        else if (onSaveKey) onSaveKey(v);
       });
 
-      keyInp.addEventListener('keydown', (e) => {
+      groqInp.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           const v = e.currentTarget.value.trim();
-          if (v && !v.startsWith('●')) onSaveKey(v);
+          if (v && !v.startsWith('●')) {
+            if (onSaveGroqKey) onSaveGroqKey(v);
+            else if (onSaveKey) onSaveKey(v);
+          }
         }
         if (e.currentTarget.value.startsWith('●')) e.currentTarget.value = '';
       });
 
-      keyInp.addEventListener('focus', (e) => {
+      groqInp.addEventListener('focus', (e) => {
         if (e.target.value.startsWith('●')) e.target.value = '';
       });
     }
 
-    // Clear key
-    const clearBtn = wrapper.querySelector('#ytai-settings-clear');
-    if (clearBtn) {
-      clearBtn.addEventListener('click', onClearKey);
+    // Clear Groq key
+    const clearGroqBtn = wrapper.querySelector('#ytai-settings-clear-groq');
+    if (clearGroqBtn) {
+      clearGroqBtn.addEventListener('click', () => {
+        if (onClearGroqKey) onClearGroqKey();
+        else if (onClearKey) onClearKey();
+      });
+    }
+
+    // Save Gemini key
+    const saveGeminiBtn = wrapper.querySelector('#ytai-settings-save-gemini');
+    const geminiInp = wrapper.querySelector('#ytai-settings-key-gemini');
+
+    if (saveGeminiBtn && geminiInp) {
+      saveGeminiBtn.addEventListener('click', () => {
+        const v = geminiInp.value.trim();
+        if (!v || v.startsWith('●')) return;
+        if (onSaveGeminiKey) onSaveGeminiKey(v);
+      });
+
+      geminiInp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          const v = e.currentTarget.value.trim();
+          if (v && !v.startsWith('●') && onSaveGeminiKey) onSaveGeminiKey(v);
+        }
+        if (e.currentTarget.value.startsWith('●')) e.currentTarget.value = '';
+      });
+
+      geminiInp.addEventListener('focus', (e) => {
+        if (e.target.value.startsWith('●')) e.target.value = '';
+      });
+    }
+
+    // Clear Gemini key
+    const clearGeminiBtn = wrapper.querySelector('#ytai-settings-clear-gemini');
+    if (clearGeminiBtn) {
+      clearGeminiBtn.addEventListener('click', () => {
+        if (onClearGeminiKey) onClearGeminiKey();
+      });
     }
 
     // Language selectors
@@ -479,6 +584,7 @@
     htmlSetup,
     htmlMain,
     htmlSettings,
+    htmlGeminiMissing,
     // Render
     setBodyEl,
     renderTranscript,

@@ -5,9 +5,10 @@
   const CONSTANTS = window.YTAI?.CONSTANTS;
   const UTILS = window.YTAI?.UTILS;
   const GROQ = window.YTAI?.GROQ;
+  const GEMINI = window.YTAI?.GEMINI;
 
-  if (!CONSTANTS || !UTILS || !GROQ) {
-    console.error('[YTAI Sponsor] Dependencies missing. Ensure constants.js, groq.js are loaded first.');
+  if (!CONSTANTS || !UTILS || !GROQ || !GEMINI) {
+    console.error('[YTAI Sponsor] Dependencies missing. Ensure constants.js, groq.js, gemini.js are loaded first.');
     return;
   }
 
@@ -39,94 +40,9 @@
   };
 
   // ───────────────────────────────────────────────────────────────────────────
-  // Agreement Calculation (measures overlap between two results)
+  // Detection Orchestrator (1 Groq call + 1 Gemini review)
   // ───────────────────────────────────────────────────────────────────────────
-  const computeAgreement = (r0, r1) => {
-    if (!r0.length && !r1.length) return 1; // Both empty = perfect agreement
-    if (!r0.length || !r1.length) return 0; // One empty, one not = no agreement
-
-    let totalAgreement = 0;
-    let totalSegments = 0;
-
-    // Check agreement for r0 segments
-    for (const seg of r0) {
-      const segDuration = seg.end - seg.start;
-      if (segDuration <= 0) continue;
-
-      const hasOverlap = r1.some(other => {
-        const overlapStart = Math.max(seg.start, other.start);
-        const overlapEnd = Math.min(seg.end, other.end);
-        const overlap = overlapEnd - overlapStart;
-        return overlap / segDuration >= 0.5;
-      });
-
-      totalAgreement += hasOverlap ? 1 : 0;
-      totalSegments++;
-    }
-
-    // Check agreement for r1 segments (reverse)
-    for (const seg of r1) {
-      const segDuration = seg.end - seg.start;
-      if (segDuration <= 0) continue;
-
-      const hasOverlap = r0.some(other => {
-        const overlapStart = Math.max(seg.start, other.start);
-        const overlapEnd = Math.min(seg.end, other.end);
-        const overlap = overlapEnd - overlapStart;
-        return overlap / segDuration >= 0.5;
-      });
-
-      totalAgreement += hasOverlap ? 1 : 0;
-      totalSegments++;
-    }
-
-    return totalSegments > 0 ? totalAgreement / totalSegments : 0;
-  };
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // Majority Vote Logic (works with 2 or 3 results)
-  // ───────────────────────────────────────────────────────────────────────────
-  const majorityVote = (results) => {
-    const confirmed = [];
-    const allCalls = results;
-
-    // Need at least 2 votes out of N calls
-    const minVotes = 2;
-
-    for (let ci = 0; ci < allCalls.length; ci++) {
-      for (const seg of allCalls[ci]) {
-        const segDuration = seg.end - seg.start;
-        if (segDuration <= 0) continue;
-
-        let votes = 0;
-        for (let cj = 0; cj < allCalls.length; cj++) {
-          const hasOverlap = allCalls[cj].some(other => {
-            const overlapStart = Math.max(seg.start, other.start);
-            const overlapEnd = Math.min(seg.end, other.end);
-            const overlap = overlapEnd - overlapStart;
-            return overlap / segDuration >= 0.5;
-          });
-          if (hasOverlap) votes++;
-        }
-
-        if (votes >= minVotes) {
-          const isDuplicate = confirmed.some(c => {
-            const overlapStart = Math.max(seg.start, c.start);
-            const overlapEnd = Math.min(seg.end, c.end);
-            return (overlapEnd - overlapStart) / segDuration >= 0.5;
-          });
-          if (!isDuplicate) confirmed.push(seg);
-        }
-      }
-    }
-
-    return confirmed;
-  };
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // Detection Orchestrator (2 sequential calls + conditional 3rd tiebreaker)
-  // ───────────────────────────────────────────────────────────────────────────
-  const detectSponsors = async (videoId, data, apiKey) => {
+  const detectSponsors = async (videoId, data, groqKey, geminiKey) => {
     if (!data?.length || !videoId) {
       return [];
     }
@@ -139,96 +55,49 @@
 
     const slim = data.map(l => ({ t: Math.round(l.start), s: l.text }));
     const transcriptJson = JSON.stringify(slim).substring(0, 15000);
-    const model = SPONSOR_MODEL; // Always use cheapest model for sponsor detection
+    const model = SPONSOR_MODEL;
 
-    console.log('[YT AI] Sponsor detection: running 2 sequential calls…');
+    console.log('[YT AI] Sponsor detection: Groq call…');
 
-    // First 2 calls - sequential (queued by groq.js with 2s gap)
-    // Wrap in try/catch so 429s don't poison the results
-    let r0 = null, r1 = null;
+    let groqSegments = [];
     try {
-      r0 = await GROQ.callSponsor(apiKey, transcriptJson, model);
+      groqSegments = await GROQ.callSponsor(groqKey, transcriptJson, model);
     } catch (e) {
       if (e.status === 429) {
-        console.warn('[YT AI] Sponsor call #1 rate limited (429)');
+        console.warn('[YT AI] Sponsor call rate limited (429)');
       } else {
-        console.warn('[YT AI] Sponsor call #1 failed:', e.message);
+        console.warn('[YT AI] Sponsor call failed:', e.message);
       }
-    }
-
-    try {
-      r1 = await GROQ.callSponsor(apiKey, transcriptJson, model);
-    } catch (e) {
-      if (e.status === 429) {
-        console.warn('[YT AI] Sponsor call #2 rate limited (429)');
-      } else {
-        console.warn('[YT AI] Sponsor call #2 failed:', e.message);
-      }
-    }
-
-    // Collect successful results
-    const successful = [];
-    if (r0 !== null) successful.push(r0);
-    if (r1 !== null) successful.push(r1);
-
-    console.log('[YT AI] Raw sponsor results:', [r0?.length ?? 'failed', r1?.length ?? 'failed']);
-
-    // If all calls failed, return empty WITHOUT caching
-    if (successful.length === 0) {
-      console.warn('[YT AI] Sponsor detection: all calls failed, returning empty (not cached)');
       return [];
     }
 
-    // If only 1 successful call, use it directly (no vote needed)
-    if (successful.length === 1) {
-      const segments = successful[0];
-      const c = loadCache();
-      c[videoId] = segments;
-      const keys = Object.keys(c);
-      if (keys.length > SPONSOR_CACHE_MAX) {
-        keys.slice(0, keys.length - SPONSOR_CACHE_MAX).forEach(k => delete c[k]);
-      }
-      saveCache(c);
-      console.log(`[YT AI] Sponsor detection: ${segments.length} segment(s) from single call (cached)`);
-      return segments;
-    }
+    console.log(`[YT AI] Sponsor detection: Groq found ${groqSegments.length} segment(s)`);
 
-    // 2+ successful calls — check agreement and possibly add tiebreaker
-    const agreement = computeAgreement(r0, r1);
-    console.log(`[YT AI] Sponsor agreement: ${Math.round(agreement * 100)}%`);
+    let finalSegments = groqSegments;
 
-    let results = successful;
-
-    // If low agreement, add 3rd tiebreaker call
-    if (agreement < 0.5) {
-      console.log('[YT AI] Sponsor detection: low agreement, running tiebreaker call…');
+    // If we have Gemini key and Groq found segments, review with Gemini
+    if (geminiKey && groqSegments.length > 0) {
+      console.log('[YT AI] Sponsor detection: Gemini review…');
       try {
-        const r2 = await GROQ.callSponsor(apiKey, transcriptJson, model);
-        results.push(r2);
-        console.log('[YT AI] Tiebreaker result:', r2.length);
+        finalSegments = await GEMINI.reviewSponsors(geminiKey, groqSegments, data);
+        console.log(`[YT AI] Sponsor detection: Gemini confirmed ${finalSegments.length} segment(s)`);
       } catch (e) {
-        if (e.status === 429) {
-          console.warn('[YT AI] Sponsor tiebreaker rate limited (429), using 2-call result');
-        } else {
-          console.warn('[YT AI] Sponsor tiebreaker failed:', e.message);
-        }
-        // Continue with 2-call majority vote
+        console.warn('[YT AI] Gemini sponsor review failed, using Groq result:', e.message);
+        finalSegments = groqSegments;
       }
     }
-
-    const segments = majorityVote(results);
 
     // Save to cache
     const c = loadCache();
-    c[videoId] = segments;
+    c[videoId] = finalSegments;
     const keys = Object.keys(c);
     if (keys.length > SPONSOR_CACHE_MAX) {
       keys.slice(0, keys.length - SPONSOR_CACHE_MAX).forEach(k => delete c[k]);
     }
     saveCache(c);
 
-    console.log(`[YT AI] Sponsor detection: ${segments.length} confirmed segment(s) after majority vote (${results.length} calls)`);
-    return segments;
+    console.log(`[YT AI] Sponsor detection: ${finalSegments.length} segment(s) saved to cache`);
+    return finalSegments;
   };
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -325,12 +194,12 @@
       _currentSeekbarObserver.disconnect();
     }
     _currentSeekbarObserver = attachSeekbarObserver(bar, segments, duration, fmtTimeFn, onObserverCreated);
-    
+
     // Notify caller about the observer (even on retry)
     if (onObserverCreated) {
       onObserverCreated(_currentSeekbarObserver);
     }
-    
+
     return _currentSeekbarObserver;
   };
 
@@ -366,8 +235,6 @@
   window.YTAI = window.YTAI || {};
   window.YTAI.SPONSOR = {
     // Detection
-    computeAgreement,
-    majorityVote,
     detectSponsors,
     loadCache,
     saveCache,

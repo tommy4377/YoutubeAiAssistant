@@ -30,6 +30,8 @@
   // API Configuration
   // ───────────────────────────────────────────────────────────────────────────
   const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+  const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+  const GEMINI_MODEL = 'gemini-2.0-flash';
 
   const selectGroqModel = (len) => {
     if (len <= 11000) return 'llama-3.1-8b-instant';
@@ -45,10 +47,11 @@
   // ───────────────────────────────────────────────────────────────────────────
   const WIDGET_ID = 'yt-ai-assistant-widget';
   const KEY_API = 'groq_api_key';
+  const KEY_GEMINI_API = 'gemini_api_key';
   const KEY_T_LANG = 'transcript_lang';
   const KEY_S_LANG = 'summary_lang';
-  const KEY_CACHE = 'summary_cache_v2';
-  const KEY_SPONSOR_CACHE = 'sponsor_cache_v1';
+  const KEY_CACHE = 'summary_cache_v3'; // Bumped to v3 for Gemini-reviewed results
+  const KEY_SPONSOR_CACHE = 'sponsor_cache_v2'; // Bumped to v2 for Gemini-reviewed segments
   const SPONSOR_CACHE_MAX = 50;
   const CACHE_MAX = 30;
   const FOOTER = 'YouTube AI Assistant by tommy437';
@@ -167,9 +170,12 @@
   // Constants
   window.YTAI.CONSTANTS = {
     GROQ_URL,
+    GEMINI_URL,
+    GEMINI_MODEL,
     SPONSOR_MODEL,
     WIDGET_ID,
     KEY_API,
+    KEY_GEMINI_API,
     KEY_T_LANG,
     KEY_S_LANG,
     KEY_CACHE,

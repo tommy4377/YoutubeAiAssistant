@@ -9,11 +9,12 @@
     STYLES,
     TRANSCRIPT,
     GROQ,
+    GEMINI,
     SPONSOR,
     UI,
   } = window.YTAI || {};
 
-  if (!CONSTANTS || !UTILS || !STYLES || !TRANSCRIPT || !GROQ || !SPONSOR || !UI) {
+  if (!CONSTANTS || !UTILS || !STYLES || !TRANSCRIPT || !GROQ || !GEMINI || !SPONSOR || !UI) {
     console.error('[YTAI Main] Dependencies missing. Check that all modules are @required in the correct order.');
     return;
   }
@@ -21,6 +22,7 @@
   const {
     WIDGET_ID,
     KEY_API,
+    KEY_GEMINI_API,
     KEY_T_LANG,
     KEY_S_LANG,
     KEY_CACHE,
@@ -106,6 +108,14 @@
     // ─────────────────────────────────────────────────────────────────────────
     _hasKey() {
       return GM_getValue(KEY_API, '').trim().length > 0;
+    }
+
+    _hasGeminiKey() {
+      return GM_getValue('gemini_api_key', '').trim().length > 0;
+    }
+
+    _getGeminiKey() {
+      return GM_getValue('gemini_api_key', '');
     }
 
     _getTLang() {
@@ -252,21 +262,43 @@
       w.id = WIDGET_ID;
       this._wrapper = w;
 
-      setHTML(w, this._hasKey()
-        ? UI.htmlMain(this.tab, this.showTs)
-        : UI.htmlSetup());
+      const hasGroq = this._hasKey();
+      const hasGemini = this._hasGeminiKey();
 
-      sidebar.insertBefore(w, sidebar.firstChild);
-
-      if (this._hasKey()) {
+      if (hasGroq && hasGemini) {
+        setHTML(w, UI.htmlMain(this.tab, this.showTs, false));
+        sidebar.insertBefore(w, sidebar.firstChild);
         this._bindMain();
       } else {
+        setHTML(w, UI.htmlSetup(hasGroq, hasGemini));
+        sidebar.insertBefore(w, sidebar.firstChild);
         this._bindSetup();
       }
     }
 
     _bindSetup() {
       UI.bindSetup(this._wrapper, {
+        onSaveGroq: (key) => {
+          GM_setValue(KEY_API, key);
+          // Only init if both keys are now present
+          if (this._hasGeminiKey()) {
+            this.init();
+          } else {
+            // Re-render setup to show only Gemini key field
+            this._buildUI(this._wrapper.parentNode);
+          }
+        },
+        onSaveGemini: (key) => {
+          GM_setValue(KEY_GEMINI_API, key);
+          // Only init if both keys are now present
+          if (this._hasKey()) {
+            this.init();
+          } else {
+            // Re-render setup to show only Groq key field
+            this._buildUI(this._wrapper.parentNode);
+          }
+        },
+        // Legacy callback
         onSave: (key) => {
           GM_setValue(KEY_API, key);
           this.init();
@@ -381,11 +413,12 @@
     // Sponsor Detection
     // ─────────────────────────────────────────────────────────────────────────
     async _detectSponsors() {
-      const apiKey = GM_getValue(KEY_API, '');
-      if (!apiKey) return;
+      const groqKey = GM_getValue(KEY_API, '');
+      const geminiKey = GM_getValue(KEY_GEMINI_API, '');
+      if (!groqKey) return;
 
       try {
-        const segments = await SPONSOR.detectSponsors(this.videoId, this.data, apiKey);
+        const segments = await SPONSOR.detectSponsors(this.videoId, this.data, groqKey, geminiKey);
         this._sponsorSegments = segments;
 
         if (segments.length > 0) {
@@ -540,6 +573,23 @@
         return;
       }
 
+      // Check if Gemini key is missing - show error
+      if (!this._hasGeminiKey()) {
+        UI.setBodyEl(bodyEl, UI.htmlGeminiMissing());
+        // Add click handler for the settings link
+        setTimeout(() => {
+          const link = bodyEl?.querySelector('#ytai-gemini-setup-link');
+          if (link) {
+            link.onclick = () => {
+              this._prevTab = this.tab;
+              this.tab = 'settings';
+              this._renderTab();
+            };
+          }
+        }, 0);
+        return;
+      }
+
       const ck = this._cacheKey();
       if (this._cache[ck]) {
         const html = UI.paintSummary(this._cache[ck], this._cache[ck + '__model']);
@@ -547,7 +597,7 @@
         return;
       }
 
-      this._callGroq();
+      this._callAI();
     }
 
     _renderSettings() {
@@ -562,6 +612,7 @@
         tl: this._getTLang(),
         sl: this._getSLang(),
         hasKey: this._hasKey(),
+        hasGeminiKey: this._hasGeminiKey(),
         masked,
         sponsorSegments: this._sponsorSegments,
         skipTypeGetter: (type) => this._getSkipType(type),
@@ -574,12 +625,65 @@
 
     _bindSettings() {
       UI.bindSettings(this._wrapper, {
+        onSaveGroqKey: (key) => {
+          GM_setValue(KEY_API, key);
+          const inp = this._wrapper.querySelector('#ytai-settings-key-groq');
+          const statusEl = this._wrapper.querySelector('#ytai-key-status-groq');
+          const statusText = this._wrapper.querySelector('#ytai-key-status-text-groq');
+          const feedback = this._wrapper.querySelector('#ytai-save-feedback-groq');
+
+          if (inp) inp.value = '●●●●●●●●' + key.slice(-4);
+          if (statusEl) statusEl.className = 'ytai-key-status connected';
+          if (statusText) statusText.textContent = 'Connected';
+          if (feedback) {
+            feedback.classList.add('show');
+            setTimeout(() => feedback.classList.remove('show'), 2500);
+          }
+
+          // If Gemini key was added while we were missing it, re-render settings
+          if (this._hasGeminiKey()) {
+            this._renderSettings();
+          }
+        },
+        onClearGroqKey: () => {
+          GM_setValue(KEY_API, '');
+          this.init();
+        },
+        onSaveGeminiKey: (key) => {
+          GM_setValue(KEY_GEMINI_API, key);
+          const inp = this._wrapper.querySelector('#ytai-settings-key-gemini');
+          const statusEl = this._wrapper.querySelector('#ytai-key-status-gemini');
+          const statusText = this._wrapper.querySelector('#ytai-key-status-text-gemini');
+          const feedback = this._wrapper.querySelector('#ytai-save-feedback-gemini');
+
+          if (inp) inp.value = '●●●●●●●●' + key.slice(-4);
+          if (statusEl) statusEl.className = 'ytai-key-status connected';
+          if (statusText) statusText.textContent = 'Connected';
+          if (feedback) {
+            feedback.classList.add('show');
+            setTimeout(() => feedback.classList.remove('show'), 2500);
+          }
+
+          // Re-render to show the clear button
+          this._renderSettings();
+        },
+        onClearGeminiKey: () => {
+          GM_setValue(KEY_GEMINI_API, '');
+          // If on AI tab, go back to transcript since AI won't work
+          if (this.tab === 'ai') {
+            this.tab = 'transcript';
+            this._renderTab();
+          } else {
+            this._renderSettings();
+          }
+        },
+        // Legacy callbacks
         onSaveKey: (key) => {
           GM_setValue(KEY_API, key);
-          const inp = this._wrapper.querySelector('#ytai-settings-key');
-          const statusEl = this._wrapper.querySelector('#ytai-key-status');
-          const statusText = this._wrapper.querySelector('#ytai-key-status-text');
-          const feedback = this._wrapper.querySelector('#ytai-save-feedback');
+          const inp = this._wrapper.querySelector('#ytai-settings-key-groq');
+          const statusEl = this._wrapper.querySelector('#ytai-key-status-groq');
+          const statusText = this._wrapper.querySelector('#ytai-key-status-text-groq');
+          const feedback = this._wrapper.querySelector('#ytai-save-feedback-groq');
 
           if (inp) inp.value = '●●●●●●●●' + key.slice(-4);
           if (statusEl) statusEl.className = 'ytai-key-status connected';
@@ -642,15 +746,37 @@
     // ─────────────────────────────────────────────────────────────────────────
     // AI Summary
     // ─────────────────────────────────────────────────────────────────────────
-    async _callGroq() {
+    async _callAI() {
       const gen = ++this._aiGen;
       const bodyEl = this._wrapper?.querySelector('#ytai-body');
       const setBody = (html) => UI.setBodyEl(bodyEl, html);
 
+      const groqKey = GM_getValue(KEY_API, '');
+      const geminiKey = GM_getValue(KEY_GEMINI_API, '');
+
+      // Check if Gemini key is required but missing
+      if (!geminiKey) {
+        UI.setBodyEl(bodyEl, UI.htmlGeminiMissing());
+        // Add click handler for the settings link
+        setTimeout(() => {
+          const link = bodyEl?.querySelector('#ytai-gemini-setup-link');
+          if (link) {
+            link.onclick = () => {
+              this._prevTab = this.tab;
+              this.tab = 'settings';
+              this._renderTab();
+            };
+          }
+        }, 0);
+        return;
+      }
+
       try {
         const transcriptText = this.data.map(l => l.text).join(' ').substring(0, 90000);
-        const result = await GROQ.callSummaryWithUI(
-          GM_getValue(KEY_API),
+
+        // Step 1: Groq generation
+        const groqResult = await GROQ.callSummaryWithUI(
+          groqKey,
           transcriptText,
           this._readChannel(),
           this._getSLang(),
@@ -660,26 +786,46 @@
         // Discard stale results
         if (gen !== this._aiGen) return;
 
-        if (!result) {
+        if (!groqResult) {
           UI.setBodyEl(bodyEl, '<div class="ytai-error">No result from AI. Please try again.</div>');
           return;
         }
 
+        // Step 2: Gemini review
+        setBody(`<div class="ytai-loading">${CONSTANTS.SVG.sparkles}<span>Reviewing with Gemini…</span></div>`);
+
+        let finalResult = groqResult;
+        try {
+          finalResult = await GEMINI.reviewSummary(geminiKey, groqResult);
+          console.log('[YT AI] Gemini review complete');
+        } catch (geminiErr) {
+          console.warn('[YT AI] Gemini review failed, using Groq result:', geminiErr.message);
+          finalResult = groqResult;
+        }
+
+        // Discard stale results
+        if (gen !== this._aiGen) return;
+
         const ck = this._cacheKey();
         this._cache[ck] = {
-          keypoints: result.keypoints,
-          summary: result.summary,
+          keypoints: finalResult.keypoints,
+          summary: finalResult.summary,
         };
-        this._cache[ck + '__model'] = result.model;
+        this._cache[ck + '__model'] = finalResult.model;
         this._saveCache();
 
-        UI.setBodyEl(bodyEl, UI.paintSummary(result, result.model));
+        UI.setBodyEl(bodyEl, UI.paintSummary(finalResult, finalResult.model));
       } catch (e) {
         // Discard stale errors
         if (gen !== this._aiGen) return;
         console.error('[YT AI]', e);
         UI.setBodyEl(bodyEl, `<div class="ytai-error">AI error: ${escapeHTML(e.message)}</div>`);
       }
+    }
+
+    // Legacy alias
+    async _callGroq() {
+      return this._callAI();
     }
 
     // ─────────────────────────────────────────────────────────────────────────

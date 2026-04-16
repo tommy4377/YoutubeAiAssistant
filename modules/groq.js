@@ -211,9 +211,7 @@ Rules:
   // ───────────────────────────────────────────────────────────────────────────
   // Sponsor Detection (Single Call)
   // ───────────────────────────────────────────────────────────────────────────
-  const callSponsor = async (apiKey, transcriptJson, model, _attempt = 1) => {
-    const MAX_429_RETRIES = 3;
-
+  const callSponsor = async (apiKey, transcriptJson, model) => {
     try {
       const res = await request({
         method: 'POST',
@@ -236,16 +234,9 @@ Rules:
       });
 
       if (res.status === 429) {
-        const retryAfter = parseInt((res.responseHeaders || '').match(/retry-after:\s*(\d+)/i)?.[1] || '10');
-        if (_attempt <= MAX_429_RETRIES) {
-          const delay = Math.min(retryAfter, 90) * 1000;
-          console.warn(`[YT AI] Sponsor call rate limited (429), retry ${_attempt}/${MAX_429_RETRIES} in ${Math.round(delay / 1000)}s…`);
-          await new Promise(r => setTimeout(r, delay));
-          return callSponsor(apiKey, transcriptJson, model, _attempt + 1);
-        }
         const err = new Error('Rate limit exceeded');
         err.status = 429;
-        err.retryAfter = retryAfter;
+        err.retryAfter = parseInt((res.responseHeaders || '').match(/retry-after:\s*(\d+)/i)?.[1] || '10');
         throw err;
       }
 
