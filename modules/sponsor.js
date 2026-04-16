@@ -87,14 +87,13 @@
       }
     }
 
-    // Save to cache
-    const c = loadCache();
-    c[videoId] = finalSegments;
-    const keys = Object.keys(c);
+    // Save to cache (BUG-02 fix: reuse the first cache object)
+    cache[videoId] = finalSegments;
+    const keys = Object.keys(cache);
     if (keys.length > SPONSOR_CACHE_MAX) {
-      keys.slice(0, keys.length - SPONSOR_CACHE_MAX).forEach(k => delete c[k]);
+      keys.slice(0, keys.length - SPONSOR_CACHE_MAX).forEach(k => delete cache[k]);
     }
-    saveCache(c);
+    saveCache(cache);
 
     console.log(`[YT AI] Sponsor detection: ${finalSegments.length} segment(s) saved to cache`);
     return finalSegments;
@@ -152,7 +151,7 @@
 
   const getProgressBar = () => doc.querySelector('.ytp-progress-bar');
 
-  const paintSeekbarSegments = async (segments, duration, fmtTimeFn, _retryCount = 0, onObserverCreated = null) => {
+  const paintSeekbarSegments = async (segments, duration, fmtTimeFn, _retryCount = 0, onObserverCreated = null, sessionId = null) => {
     removeSeekbarOverlay();
     if (!segments?.length || !duration) return null;
 
@@ -161,7 +160,7 @@
       // Retry after delay (max 5 retries)
       if (_retryCount < 5) {
         await new Promise(r => setTimeout(r, 1500));
-        return paintSeekbarSegments(segments, duration, fmtTimeFn, _retryCount + 1, onObserverCreated);
+        return paintSeekbarSegments(segments, duration, fmtTimeFn, _retryCount + 1, onObserverCreated, sessionId);
       }
       return null;
     }
@@ -193,7 +192,7 @@
     if (_currentSeekbarObserver) {
       _currentSeekbarObserver.disconnect();
     }
-    _currentSeekbarObserver = attachSeekbarObserver(bar, segments, duration, fmtTimeFn, onObserverCreated);
+    _currentSeekbarObserver = attachSeekbarObserver(bar, segments, duration, fmtTimeFn, onObserverCreated, sessionId);
 
     // Notify caller about the observer (even on retry)
     if (onObserverCreated) {
@@ -207,13 +206,17 @@
     doc.getElementById('ytai-segment-overlay')?.remove();
   };
 
-  const attachSeekbarObserver = (bar, segments, duration, fmtTimeFn, onObserverCreated = null) => {
+  const attachSeekbarObserver = (bar, segments, duration, fmtTimeFn, onObserverCreated = null, sessionId = null) => {
     const observer = new MutationObserver(() => {
       if (!doc.getElementById('ytai-segment-overlay') && segments.length) {
         // Disconnect this observer to prevent duplicate triggers
         observer.disconnect();
-        // Recreate overlay with same params, propagate observer reference
-        setTimeout(() => paintSeekbarSegments(segments, duration, fmtTimeFn, 0, onObserverCreated), 300);
+        setTimeout(() => {
+          // Only repaint if still on the same video (BUG-06 fix)
+          const currentVideoId = new URLSearchParams(location.search).get('v');
+          if (sessionId && currentVideoId !== sessionId) return;
+          paintSeekbarSegments(segments, duration, fmtTimeFn, 0, onObserverCreated, sessionId);
+        }, 300);
       }
     });
     observer.observe(bar, { childList: true });

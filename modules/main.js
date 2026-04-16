@@ -111,11 +111,11 @@
     }
 
     _hasGeminiKey() {
-      return GM_getValue('gemini_api_key', '').trim().length > 0;
+      return GM_getValue(KEY_GEMINI_API, '').trim().length > 0;  // BUG-03 fix: use constant
     }
 
     _getGeminiKey() {
-      return GM_getValue('gemini_api_key', '');
+      return GM_getValue(KEY_GEMINI_API, '');  // BUG-03 fix: use constant
     }
 
     _getTLang() {
@@ -184,7 +184,7 @@
           await this._fetchTranscript();
         }
       } finally {
-        setTimeout(() => { this._isIniting = false; }, 1200);
+        this._isIniting = false;  // BUG-04 fix: reset immediately without timeout
       }
     }
 
@@ -284,8 +284,13 @@
           if (this._hasGeminiKey()) {
             this.init();
           } else {
-            // Re-render setup to show only Gemini key field
-            this._buildUI(this._wrapper.parentNode);
+            // Re-render setup to show only Gemini key field (BUG-07 fix: guard parentNode)
+            const parent = this._wrapper?.parentNode;
+            if (parent) {
+              this._buildUI(parent);
+            } else {
+              this.init();
+            }
           }
         },
         onSaveGemini: (key) => {
@@ -294,8 +299,13 @@
           if (this._hasKey()) {
             this.init();
           } else {
-            // Re-render setup to show only Groq key field
-            this._buildUI(this._wrapper.parentNode);
+            // Re-render setup to show only Groq key field (BUG-07 fix: guard parentNode)
+            const parent = this._wrapper?.parentNode;
+            if (parent) {
+              this._buildUI(parent);
+            } else {
+              this.init();
+            }
           }
         },
         // Legacy callback
@@ -460,7 +470,7 @@
     async _paintSeekbarSegments(retries = 0) {
       const video = doc.querySelector('video');
       if (!video?.duration) {
-        // Retry with max 5 attempts (Bug 3 fix)
+        // Retry with max 5 attempts
         if (retries < 5) {
           await new Promise(r => setTimeout(r, 1500));
           return this._paintSeekbarSegments(retries + 1);
@@ -468,13 +478,15 @@
         return;
       }
 
-      // Use async version with callback to track observer even on retry (Bug 2 fix)
+      // Use async version with callback to track observer even on retry
+      // Pass videoId as sessionId to prevent stale repaint after navigation (BUG-06 fix)
       this._seekbarObserver = await SPONSOR.paintSeekbarSegments(
         this._sponsorSegments,
         video.duration,
         UI.fmtTime,
         0, // retryCount
-        (observer) => { this._seekbarObserver = observer; } // callback for retry case
+        (observer) => { this._seekbarObserver = observer; }, // callback for retry case
+        this.videoId // sessionId for stale-check
       );
     }
 
@@ -772,7 +784,11 @@
       }
 
       try {
-        const transcriptText = this.data.map(l => l.text).join(' ').substring(0, 90000);
+        // OPT-03: cut at word boundary instead of mid-word
+        const fullText = this.data.map(l => l.text).join(' ');
+        const transcriptText = fullText.length > 90000
+          ? fullText.substring(0, fullText.lastIndexOf(' ', 90000))
+          : fullText;
 
         // Step 1: Groq generation
         const groqResult = await GROQ.callSummaryWithUI(
@@ -944,7 +960,17 @@
     }
   }
 
-  setInterval(run, 1500);
+  // BUG-08 fix: add debounce to prevent rapid init() calls
+  let _lastInitTime = 0;
+  const DEBOUNCE_MS = 2000;
+  function runDebounced() {
+    const now = Date.now();
+    if (now - _lastInitTime < DEBOUNCE_MS) return;
+    _lastInitTime = now;
+    run();
+  }
+
+  setInterval(runDebounced, 5000);  // OPT-02: increased from 1500ms to 5000ms
   doc.readyState !== 'loading' ? run() : doc.addEventListener('DOMContentLoaded', run);
   doc.addEventListener('yt-navigate-finish', run);
 

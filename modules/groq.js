@@ -248,10 +248,13 @@ Rules:
       if (resp.error) return [];
 
       const raw = resp.choices?.[0]?.message?.content || '';
-      const j = JSON.parse(raw);
-      const segs = Array.isArray(j?.segments) ? j.segments : [];
+      const j = parseJSON(raw);  // BUG-01 fix: use robust parseJSON instead of bare JSON.parse
+      if (!j || !Array.isArray(j?.segments)) {
+        console.warn('[YT AI] callSponsor: could not parse response', raw);
+        return [];
+      }
 
-      return segs.filter(s =>
+      return j.segments.filter(s =>
         typeof s.start === 'number' && typeof s.end === 'number' && s.end > s.start
       );
     } catch (e) {

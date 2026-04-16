@@ -165,6 +165,8 @@
     while ((m = re.exec(rawText)) !== null) {
       const start = parseFloat(m[1]) || 0;
       let text = m[2];
+      // BUG-09: YouTube double-encodes XML entities in auto-generated captions.
+      // Manual tracks are single-encoded; the second pass is a no-op for them.
       text = decodeHTML(decodeHTML(text));
       text = text
         .replace(/<[^>]+>/g, '')

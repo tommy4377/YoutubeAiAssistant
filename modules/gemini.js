@@ -14,79 +14,80 @@
   const { setHTML } = UTILS;
 
   // ───────────────────────────────────────────────────────────────────────────
+  // Raw GM Request Helper (avoids async onload anti-pattern)
+  // ───────────────────────────────────────────────────────────────────────────
+  const _gmPost = (options) => new Promise((resolve, reject) => {
+    if (typeof GM_xmlhttpRequest === 'undefined') {
+      reject(new Error('GM_xmlhttpRequest not available'));
+      return;
+    }
+    GM_xmlhttpRequest({
+      ...options,
+      onload: resolve,
+      onerror: reject,
+      ontimeout: reject
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
   // Gemini API Request Wrapper
   // ───────────────────────────────────────────────────────────────────────────
-  const callGemini = async (apiKey, systemInstruction, userContent, _attempt = 1) => {
-    const MAX_429_RETRIES = 2;
+  const callGemini = async (apiKey, systemInstruction, userContent) => {
+    const MAX_RETRIES = 2;
+    let attempt = 0;
 
-    return new Promise((resolve, reject) => {
-      if (typeof GM_xmlhttpRequest === 'undefined') {
-        reject(new Error('GM_xmlhttpRequest not available'));
-        return;
+    const data = JSON.stringify({
+      contents: [
+        { role: 'user', parts: [{ text: userContent }] }
+      ],
+      systemInstruction: {
+        parts: [{ text: systemInstruction }]
+      },
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 2048,
+        responseMimeType: 'application/json'
       }
+    });
 
-      const data = JSON.stringify({
-        contents: [
-          { role: 'user', parts: [{ text: userContent }] }
-        ],
-        systemInstruction: {
-          parts: [{ text: systemInstruction }]
-        },
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 2048,
-          responseMimeType: 'application/json'
-        }
-      });
-
-      GM_xmlhttpRequest({
+    while (attempt <= MAX_RETRIES) {
+      const res = await _gmPost({
         method: 'POST',
         url: `${GEMINI_URL}?key=${encodeURIComponent(apiKey)}`,
         headers: {
           'Content-Type': 'application/json'
         },
         data,
-        timeout: 60000,
-        onload: async (res) => {
-          // Handle 429 rate limit
-          if (res.status === 429) {
-            const retryAfter = parseInt((res.responseHeaders || '').match(/retry-after:\s*(\d+)/i)?.[1] || '10');
-            if (_attempt <= MAX_429_RETRIES) {
-              const delay = Math.min(retryAfter, 60) * 1000;
-              console.warn(`[YT AI] Gemini call rate limited (429), retry ${_attempt}/${MAX_429_RETRIES} in ${Math.round(delay / 1000)}s…`);
-              await new Promise(r => setTimeout(r, delay));
-              try {
-                const result = await callGemini(apiKey, systemInstruction, userContent, _attempt + 1);
-                resolve(result);
-              } catch (e) {
-                reject(e);
-              }
-              return;
-            }
-            const err = new Error('Gemini rate limit exceeded');
-            err.status = 429;
-            err.retryAfter = retryAfter;
-            reject(err);
-            return;
-          }
-
-          if (res.status >= 400) {
-            reject(new Error(`Gemini API error: HTTP ${res.status}`));
-            return;
-          }
-
-          try {
-            const resp = JSON.parse(res.responseText);
-            const text = resp.candidates?.[0]?.content?.parts?.[0]?.text || '';
-            resolve(text);
-          } catch (e) {
-            reject(new Error('Failed to parse Gemini response'));
-          }
-        },
-        onerror: () => reject(new Error('Gemini API request failed')),
-        ontimeout: () => reject(new Error('Gemini API request timed out'))
+        timeout: 60000
       });
-    });
+
+      if (res.status === 429) {
+        if (attempt >= MAX_RETRIES) {
+          const err = new Error('Gemini rate limit exceeded');
+          err.status = 429;
+          err.retryAfter = parseInt((res.responseHeaders || '').match(/retry-after:\s*(\d+)/i)?.[1] || '10');
+          throw err;
+        }
+        const delay = Math.min(parseInt((res.responseHeaders || '').match(/retry-after:\s*(\d+)/i)?.[1] || '10'), 60) * 1000;
+        console.warn(`[YT AI] Gemini call rate limited (429), retry ${attempt + 1}/${MAX_RETRIES} in ${Math.round(delay / 1000)}s…`);
+        await new Promise(r => setTimeout(r, delay));
+        attempt++;
+        continue;
+      }
+
+      if (res.status >= 400) {
+        throw new Error(`Gemini API error: HTTP ${res.status}`);
+      }
+
+      try {
+        const resp = JSON.parse(res.responseText);
+        return resp.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      } catch (e) {
+        throw new Error('Failed to parse Gemini response');
+      }
+    }
+
+    throw new Error('Max retries exceeded');
   };
 
   // ───────────────────────────────────────────────────────────────────────────
