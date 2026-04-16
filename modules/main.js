@@ -141,7 +141,7 @@
 
     // Skip type toggles
     _getSkipType(type) {
-      return GM_getValue(`skip_${type}`, true);
+      return GM_getValue(`skip_${type}`, false); // Fix 3: default OFF
     }
 
     _setSkipType(type, val) {
@@ -185,9 +185,6 @@
       if (this._hasKey() && this._hasGeminiKey()) {
         await this._fetchTranscript();
       }
-
-      // Sponsor detection generation check
-      this._sponsorGen++;  // BUG-12: increment generation on init
       } finally {
         this._isIniting = false;  // BUG-04 fix: reset immediately without timeout
       }
@@ -444,7 +441,7 @@
     // Sponsor Detection
     // ─────────────────────────────────────────────────────────────────────────
     async _detectSponsors() {
-      const gen = this._sponsorGen;  // BUG-12: capture generation
+      const gen = ++this._sponsorGen;  // Fix 2: increment first, then capture
       const groqKey = GM_getValue(KEY_API, '');
       const geminiKey = GM_getValue(KEY_GEMINI_API, '');
       if (!groqKey) return;

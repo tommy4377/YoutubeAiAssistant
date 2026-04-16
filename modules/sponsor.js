@@ -103,17 +103,47 @@
   // ───────────────────────────────────────────────────────────────────────────
   // Skip Logic
   // ───────────────────────────────────────────────────────────────────────────
+  // Fix 4: New attachSkipper with prompt mode support
   const attachSkipper = (video, segments, skipTypeGetter) => {
+    let _activePrompt = null; // track the currently shown prompt
+
     const listener = () => {
       const ct = video.currentTime;
+
       for (const seg of segments) {
-        // Check if this type is enabled for skipping
-        if (!skipTypeGetter(seg.type || SEG_TYPE_SPONSOR)) continue;
+        const autoSkip = skipTypeGetter(seg.type || SEG_TYPE_SPONSOR);
 
         if (ct >= seg.start - 0.3 && ct < seg.end) {
-          video.currentTime = seg.end;
-          showSkipToast(seg.label || 'Segment', seg.type);
-          break;
+          if (autoSkip) {
+            // Auto-skip: jump immediately, dismiss any prompt
+            _dismissPrompt();
+            video.currentTime = seg.end;
+            showSkipToast(seg.label || 'Segment', seg.type);
+            break;
+          } else {
+            // Prompt mode: show persistent prompt if not already showing for this segment
+            if (!_activePrompt || _activePrompt.segStart !== seg.start) {
+              _dismissPrompt();
+              _activePrompt = showSkipPrompt(seg, video, () => { _activePrompt = null; });
+            }
+            return; // inside a prompt segment, don't check others
+          }
+        }
+      }
+
+      // If we're outside all segments, dismiss any open prompt
+      const stillInSeg = segments.some(seg =>
+        !skipTypeGetter(seg.type || SEG_TYPE_SPONSOR) &&
+        ct >= seg.start - 0.3 && ct < seg.end
+      );
+      if (!stillInSeg && _activePrompt) {
+        _dismissPrompt();
+      }
+
+      function _dismissPrompt() {
+        if (_activePrompt) {
+          _activePrompt.remove();
+          _activePrompt = null;
         }
       }
     };
@@ -145,62 +175,118 @@
     }, 3000);
   };
 
+  // Fix 4: New showSkipPrompt function for manual skip mode
+  const showSkipPrompt = (seg, video, onDismiss) => {
+    const existing = doc.getElementById('ytai-skip-prompt');
+    if (existing) existing.remove();
+
+    const color = SEG_COLORS[seg.type] || C.warning;
+    const prompt = doc.createElement('div');
+    prompt.id = 'ytai-skip-prompt';
+
+    // Find the best container: prefer the YouTube player div so it works in fullscreen
+    const playerContainer = doc.getElementById('movie_player') || doc.querySelector('.html5-video-player') || doc.body;
+
+    setHTML(prompt, `
+      <span style="color:${color};font-weight:600">${escapeHTML(seg.label || 'Segment')}</span>
+      <span style="color:rgba(255,255,255,.5);margin:0 6px">—</span>
+      <span style="color:rgba(255,255,255,.75);font-size:12px">Press</span>
+      <kbd>Enter</kbd>
+      <span style="color:rgba(255,255,255,.75);font-size:12px">to skip</span>
+    `);
+
+    playerContainer.appendChild(prompt);
+
+    // Keyboard handler
+    const onKey = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        video.currentTime = seg.end;
+        showSkipToast(seg.label || 'Segment', seg.type);
+        cleanup();
+      }
+    };
+
+    const cleanup = () => {
+      doc.removeEventListener('keydown', onKey, true);
+      if (doc.getElementById('ytai-skip-prompt') === prompt) {
+        prompt.remove();
+      }
+      if (onDismiss) onDismiss();
+    };
+
+    doc.addEventListener('keydown', onKey, true);
+
+    // Attach segStart so the caller can compare
+    prompt.segStart = seg.start;
+
+    // Expose remove method for external cleanup
+    prompt.remove = () => {
+      cleanup();
+    };
+
+    return prompt;
+  };
+
   // ───────────────────────────────────────────────────────────────────────────
   // Seekbar Overlay
   // ───────────────────────────────────────────────────────────────────────────
   let _currentSeekbarObserver = null;
+  let _isPainting = false; // Fix 1: guard against concurrent repaints
 
   const getProgressBar = () => doc.querySelector('.ytp-progress-bar');
 
   const paintSeekbarSegments = async (segments, duration, fmtTimeFn, _retryCount = 0, onObserverCreated = null, sessionId = null) => {
-    removeSeekbarOverlay();
-    if (!segments?.length || !duration) return null;
+    if (_isPainting) return null; // Fix 1: prevent concurrent repaints
+    _isPainting = true;
+    try {
+      removeSeekbarOverlay();
+      if (!segments?.length || !duration) return null;
 
-    const bar = getProgressBar();
-    if (!bar) {
-      // Retry after delay (max 5 retries)
-      if (_retryCount < 5) {
-        await new Promise(r => setTimeout(r, 1500));
-        return paintSeekbarSegments(segments, duration, fmtTimeFn, _retryCount + 1, onObserverCreated, sessionId);
+      const bar = getProgressBar();
+      if (!bar) {
+        if (_retryCount < 5) {
+          await new Promise(r => setTimeout(r, 1500));
+          return paintSeekbarSegments(segments, duration, fmtTimeFn, _retryCount + 1, onObserverCreated, sessionId);
+        }
+        return null;
       }
-      return null;
+
+      if (getComputedStyle(bar).position === 'static') {
+        bar.style.position = 'relative';
+      }
+
+      const overlay = doc.createElement('div');
+      overlay.id = 'ytai-segment-overlay';
+
+      for (const seg of segments) {
+        const color = SEG_COLORS[seg.type] || C.warning;
+        const left = (seg.start / duration) * 100;
+        const width = ((seg.end - seg.start) / duration) * 100;
+        const div = doc.createElement('div');
+        div.className = 'ytai-seg-bar';
+        div.style.left = `${left}%`;
+        div.style.width = `${width}%`;
+        div.style.background = color;
+        div.title = `[${seg.type || 'segment'}] ${seg.label || ''} (${fmtTimeFn(seg.start)} → ${fmtTimeFn(seg.end)})`;
+        overlay.appendChild(div);
+      }
+
+      bar.appendChild(overlay);
+
+      if (_currentSeekbarObserver) {
+        _currentSeekbarObserver.disconnect();
+      }
+      _currentSeekbarObserver = attachSeekbarObserver(bar, segments, duration, fmtTimeFn, onObserverCreated, sessionId);
+
+      if (onObserverCreated) {
+        onObserverCreated(_currentSeekbarObserver);
+      }
+
+      return _currentSeekbarObserver;
+    } finally {
+      _isPainting = false; // Fix 1: reset guard
     }
-
-    // Ensure position:relative for absolute children
-    if (getComputedStyle(bar).position === 'static') {
-      bar.style.position = 'relative';
-    }
-
-    const overlay = doc.createElement('div');
-    overlay.id = 'ytai-segment-overlay';
-
-    for (const seg of segments) {
-      const color = SEG_COLORS[seg.type] || C.warning;
-      const left = (seg.start / duration) * 100;
-      const width = ((seg.end - seg.start) / duration) * 100;
-      const div = doc.createElement('div');
-      div.className = 'ytai-seg-bar';
-      div.style.left = `${left}%`;
-      div.style.width = `${width}%`;
-      div.style.background = color;
-      div.title = `[${seg.type || 'segment'}] ${seg.label || ''} (${fmtTimeFn(seg.start)} → ${fmtTimeFn(seg.end)})`;
-      overlay.appendChild(div);
-    }
-
-    bar.appendChild(overlay);
-
-    // Disconnect any existing observer before creating a new one
-    if (_currentSeekbarObserver) {
-      _currentSeekbarObserver.disconnect();
-    }
-    _currentSeekbarObserver = attachSeekbarObserver(bar, segments, duration, fmtTimeFn, onObserverCreated, sessionId);
-
-    // Notify caller about the observer (even on retry)
-    if (onObserverCreated) {
-      onObserverCreated(_currentSeekbarObserver);
-    }
-
-    return _currentSeekbarObserver;
   };
 
   const removeSeekbarOverlay = () => {
@@ -210,14 +296,15 @@
   const attachSeekbarObserver = (bar, segments, duration, fmtTimeFn, onObserverCreated = null, sessionId = null) => {
     const observer = new MutationObserver(() => {
       if (!doc.getElementById('ytai-segment-overlay') && segments.length) {
-        // Disconnect this observer to prevent duplicate triggers
         observer.disconnect();
         setTimeout(() => {
-          // Only repaint if still on the same video (BUG-06 fix)
           const currentVideoId = new URLSearchParams(location.search).get('v');
           if (sessionId && currentVideoId !== sessionId) return;
-          paintSeekbarSegments(segments, duration, fmtTimeFn, 0, onObserverCreated, sessionId);
-        }, 300);
+          // Fix 1: double-check still missing before repainting
+          if (!doc.getElementById('ytai-segment-overlay')) {
+            paintSeekbarSegments(segments, duration, fmtTimeFn, 0, onObserverCreated, sessionId);
+          }
+        }, 500); // Fix 1: increased from 300 to 500ms for DOM to settle
       }
     });
     observer.observe(bar, { childList: true });
@@ -246,6 +333,7 @@
     attachSkipper,
     detachSkipper,
     showSkipToast,
+    showSkipPrompt, // Fix 4: export new prompt function
     // Seekbar overlay
     getProgressBar,
     paintSeekbarSegments,

@@ -377,6 +377,38 @@
         pointer-events:none;
         animation:ytai-toast-in .15s ease;
       }
+      #ytai-skip-prompt {
+        position:absolute;
+        bottom:54px;
+        right:16px;
+        z-index:9999;
+        background:rgba(0,0,0,.82);
+        color:${C.text};
+        font-size:13px;
+        font-family:Roboto,Arial,sans-serif;
+        padding:9px 14px;
+        border-radius:8px;
+        border:1px solid rgba(255,255,255,.15);
+        box-shadow:0 4px 20px rgba(0,0,0,.6);
+        pointer-events:none;
+        display:flex;
+        align-items:center;
+        gap:5px;
+        animation:ytai-toast-in .15s ease;
+      }
+      #ytai-skip-prompt kbd {
+        display:inline-block;
+        background:rgba(255,255,255,.12);
+        border:1px solid rgba(255,255,255,.25);
+        border-bottom-width:2px;
+        border-radius:5px;
+        padding:1px 7px;
+        font-size:12px;
+        font-family:Roboto,Arial,sans-serif;
+        font-weight:600;
+        color:${C.text};
+        letter-spacing:.3px;
+      }
       @keyframes ytai-toast-in { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
       .ytai-toggle-row { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
       .ytai-toggle { position:relative; width:36px; height:20px; flex-shrink:0; }
