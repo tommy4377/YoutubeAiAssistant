@@ -103,10 +103,22 @@
   // ───────────────────────────────────────────────────────────────────────────
   // Skip Logic
   // ───────────────────────────────────────────────────────────────────────────
+  // Track the active prompt globally so it can be dismissed externally
+  let _activePrompt = null;
+
+  // Fix: Export dismiss function for main.js to call during cleanup
+  const dismissAllPrompts = () => {
+    if (_activePrompt) {
+      _activePrompt.dismiss();
+      _activePrompt = null;
+    }
+    // Also remove any orphaned DOM elements
+    const existing = doc.getElementById('ytai-skip-prompt');
+    if (existing) existing.remove();
+  };
+
   // Fix 4: New attachSkipper with prompt mode support
   const attachSkipper = (video, segments, skipTypeGetter) => {
-    let _activePrompt = null; // track the currently shown prompt
-
     const listener = () => {
       const ct = video.currentTime;
 
@@ -156,6 +168,8 @@
     if (video && listener) {
       video.removeEventListener('timeupdate', listener);
     }
+    // Fix: clear active prompt reference when skipper is detached
+    _activePrompt = null;
   };
 
   const showSkipToast = (label, type) => {
@@ -166,7 +180,10 @@
     const toast = doc.createElement('div');
     toast.id = 'ytai-skip-toast';
     setHTML(toast, `⏭ Skipped <span style="color:${color}">${escapeHTML(label)}</span>`);
-    doc.body.appendChild(toast);
+
+    // Fix: Append to player container so toast works in fullscreen
+    const playerContainer = doc.getElementById('movie_player') || doc.querySelector('.html5-video-player') || doc.body;
+    playerContainer.appendChild(toast);
 
     setTimeout(() => {
       if (doc.getElementById('ytai-skip-toast') === toast) {
@@ -250,6 +267,7 @@
       if (!bar) {
         if (_retryCount < 5) {
           await new Promise(r => setTimeout(r, 1500));
+          _isPainting = false; // Fix: reset guard before retry so recursive call can proceed
           return paintSeekbarSegments(segments, duration, fmtTimeFn, _retryCount + 1, onObserverCreated, sessionId);
         }
         return null;
@@ -337,6 +355,7 @@
     detachSkipper,
     showSkipToast,
     showSkipPrompt, // Fix 4: export new prompt function
+    dismissAllPrompts, // Fix: export dismiss function for cleanup
     // Seekbar overlay
     getProgressBar,
     paintSeekbarSegments,

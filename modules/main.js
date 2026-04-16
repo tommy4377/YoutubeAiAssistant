@@ -485,6 +485,8 @@
 
     _detachSkipper() {
       if (!this._skipperAttached) return;
+      // Fix: Dismiss any active prompts before removing listener (prevents keydown leaks)
+      SPONSOR.dismissAllPrompts();
       // Use stored video reference, not fresh query (Bug 5 fix)
       SPONSOR.detachSkipper(this._videoEl, this._skipListener);
       this._videoEl = null;
