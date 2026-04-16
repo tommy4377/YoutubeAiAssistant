@@ -398,6 +398,7 @@
     // ─────────────────────────────────────────────────────────────────────────
     async _fetchTranscript() {
       const gen = ++this._fetchGen;
+      console.log('[YT AI] Fetching transcript, gen:', gen, 'lang:', this._getTLang(), 'videoId:', this.videoId);
       this.data = [];
       this._fetchMethod = '';
 
@@ -721,6 +722,7 @@
         },
         // BUG-15 fix: removed legacy onSaveKey/onClearKey callbacks
         onTLangChange: (value) => {
+          console.log('[YT AI] Transcript language changed to:', value);
           this._setTLang(value);
           this.data = [];
           // Clear sponsor state since transcript changed
@@ -734,6 +736,7 @@
           if (this.tab === 'settings') {
             this.tab = this._prevTab || 'transcript';
           }
+          this._renderTab();
           this._fetchTranscript();
         },
         onSLangChange: (value) => {
