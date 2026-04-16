@@ -14,13 +14,18 @@
   const { selectGroqModel } = UTILS;
 
   // ───────────────────────────────────────────────────────────────────────────
-  // Request Queue with 2s minimum gap (prevents rate limit 429s)
+  // Request Queue with adaptive rate limiting (prevents 429s)
   // ───────────────────────────────────────────────────────────────────────────
   let _lastCallTime = 0;
   const _callQueue = [];
   let _isProcessingQueue = false;
+  let _adaptiveGapMs = 3000; // Start with 3s, increases after 429s
+  let _consecutive429s = 0;
+  let _last429Time = 0;
 
-  const MIN_CALL_GAP_MS = 2000; // 2 seconds between requests
+  const MIN_CALL_GAP_MS = 3000; // 3 seconds base gap
+  const MAX_CALL_GAP_MS = 15000; // Max 15s after repeated 429s
+  const JITTER_MS = 500; // ±500ms randomization
 
   const processQueue = async () => {
     if (_isProcessingQueue) return;
@@ -29,19 +34,38 @@
     while (_callQueue.length > 0) {
       const { options, resolve, reject } = _callQueue.shift();
 
-      // Enforce minimum gap between calls
+      // Enforce minimum gap between calls with jitter
       const now = Date.now();
       const timeSinceLastCall = now - _lastCallTime;
-      if (timeSinceLastCall < MIN_CALL_GAP_MS) {
-        await new Promise(r => setTimeout(r, MIN_CALL_GAP_MS - timeSinceLastCall));
+      const jitter = Math.floor(Math.random() * JITTER_MS * 2) - JITTER_MS;
+      const currentGap = _adaptiveGapMs + jitter;
+      
+      if (timeSinceLastCall < currentGap) {
+        const waitMs = currentGap - timeSinceLastCall;
+        console.log(`[YT AI] Rate limit: waiting ${waitMs}ms before next call (gap=${_adaptiveGapMs}ms${jitter >= 0 ? '+' : ''}${jitter}ms)`);
+        await new Promise(r => setTimeout(r, waitMs));
       }
       _lastCallTime = Date.now();
 
       // Execute the actual request
       try {
         const result = await executeRequest(options);
+        // Success - slowly reduce adaptive gap back toward normal
+        if (_adaptiveGapMs > MIN_CALL_GAP_MS && Date.now() - _last429Time > 60000) {
+          _adaptiveGapMs = Math.max(MIN_CALL_GAP_MS, _adaptiveGapMs - 500);
+          _consecutive429s = 0;
+        }
         resolve(result);
       } catch (e) {
+        // On 429, increase adaptive gap for next calls
+        if (e.status === 429) {
+          _consecutive429s++;
+          _last429Time = Date.now();
+          // Exponential backoff: 3s → 5s → 8s → 12s → 15s cap
+          const backoffMultiplier = Math.min(_consecutive429s, 4);
+          _adaptiveGapMs = Math.min(MAX_CALL_GAP_MS, MIN_CALL_GAP_MS * (1 + backoffMultiplier * 0.8));
+          console.warn(`[YT AI] Rate limit 429 #${_consecutive429s}, increasing gap to ${_adaptiveGapMs}ms`);
+        }
         reject(e);
       }
     }

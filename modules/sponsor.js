@@ -23,6 +23,22 @@
   const { doc, escapeHTML, setHTML } = UTILS;
 
   // ───────────────────────────────────────────────────────────────────────────
+  // Global Rate Limit Tracking (persists across calls)
+  // ───────────────────────────────────────────────────────────────────────────
+  let _globalLast429Time = 0;
+  let _global429Count = 0;
+  const GLOBAL_429_COOLDOWN_MS = 30000; // 30s cooldown after any 429
+
+  const checkGlobalRateLimit = async () => {
+    const timeSinceLast429 = Date.now() - _globalLast429Time;
+    if (timeSinceLast429 < GLOBAL_429_COOLDOWN_MS && _global429Count > 0) {
+      const waitMs = GLOBAL_429_COOLDOWN_MS - timeSinceLast429;
+      console.log(`[YT AI] Recent 429 detected (${_global429Count}x), waiting ${waitMs}ms before sponsor detection`);
+      await new Promise(r => setTimeout(r, waitMs));
+    }
+  };
+
+  // ───────────────────────────────────────────────────────────────────────────
   // Cache Management
   // ───────────────────────────────────────────────────────────────────────────
   const loadCache = () => {
@@ -42,7 +58,7 @@
   // ───────────────────────────────────────────────────────────────────────────
   // Detection Orchestrator (chunked Groq calls + 1 Gemini review)
   // ───────────────────────────────────────────────────────────────────────────
-  const CHUNK_SIZE = 175; // lines per chunk (~5-7KB JSON each, well under Groq limits)
+  const CHUNK_SIZE = 150; // lines per chunk (~4-6KB JSON each, faster calls, less rate limit risk)
 
   const detectSponsors = async (videoId, data, groqKey, geminiKey) => {
     if (!data?.length || !videoId) {
@@ -70,6 +86,9 @@
     const model = SPONSOR_MODEL;
     console.log(`[YT AI] Sponsor detection: ${chunks.length} chunk(s), ${slim.length} lines total`);
 
+    // Check global rate limit state before starting
+    await checkGlobalRateLimit();
+
     // Process chunks sequentially to respect rate limits
     const allGroqSegments = [];
     const seenKeys = new Set(); // For deduplication
@@ -95,7 +114,9 @@
       } catch (e) {
         if (e.status === 429) {
           // Rate limit - stop processing but keep segments from completed chunks
-          console.warn(`[YT AI] Sponsor chunk ${i + 1} rate limited (429), using ${allGroqSegments.length} segment(s) from completed chunks`);
+          _globalLast429Time = Date.now();
+          _global429Count++;
+          console.warn(`[YT AI] Sponsor chunk ${i + 1} rate limited (429 #${_global429Count}), using ${allGroqSegments.length} segment(s) from completed chunks`);
           break;
         }
         // Other errors - log and continue to next chunk
