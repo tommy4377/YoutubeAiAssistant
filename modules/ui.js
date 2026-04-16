@@ -108,9 +108,9 @@
     const sOpts = LANGUAGES.map(l => `<option value="${l.value}" ${l.value === sl ? 'selected' : ''}>${l.label}</option>`).join('');
 
     const skipTypes = [
-      { key: SEG_TYPE_SPONSOR, label: 'Skip Sponsor / Ads', desc: 'Paid ad reads by the creator' },
-      { key: SEG_TYPE_SELF_PROMO, label: 'Skip Self-Promotion', desc: 'Channel/Patreon/merch plugs' },
-      { key: SEG_TYPE_ENGAGEMENT, label: 'Skip Engagement Calls', desc: '"Like, subscribe, comment" prompts' },
+      { key: SEG_TYPE_SPONSOR, label: 'Skip Sponsor / Ads', desc: 'ON = auto-skip · OFF = press Enter to skip' },
+      { key: SEG_TYPE_SELF_PROMO, label: 'Skip Self-Promotion', desc: 'ON = auto-skip · OFF = press Enter to skip' },
+      { key: SEG_TYPE_ENGAGEMENT, label: 'Skip Engagement Calls', desc: 'ON = auto-skip · OFF = press Enter to skip' },
     ];
 
     const toggleRows = skipTypes.map(t => `

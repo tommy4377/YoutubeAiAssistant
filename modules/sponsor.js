@@ -142,7 +142,7 @@
 
       function _dismissPrompt() {
         if (_activePrompt) {
-          _activePrompt.remove();
+          _activePrompt.dismiss(); // Fix: use dismiss() not remove() to avoid recursion
           _activePrompt = null;
         }
       }
@@ -197,20 +197,25 @@
 
     playerContainer.appendChild(prompt);
 
+    let dismissed = false; // Fix: track dismissal state to prevent double cleanup
+
     // Keyboard handler
     const onKey = (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
         video.currentTime = seg.end;
         showSkipToast(seg.label || 'Segment', seg.type);
-        cleanup();
+        doCleanup();
       }
     };
 
-    const cleanup = () => {
+    const doCleanup = () => {
+      if (dismissed) return; // Fix: prevent double execution
+      dismissed = true;
       doc.removeEventListener('keydown', onKey, true);
-      if (doc.getElementById('ytai-skip-prompt') === prompt) {
-        prompt.remove();
+      // Fix: use native DOM remove directly, not custom method
+      if (prompt.parentNode) {
+        prompt.parentNode.removeChild(prompt);
       }
       if (onDismiss) onDismiss();
     };
@@ -220,10 +225,8 @@
     // Attach segStart so the caller can compare
     prompt.segStart = seg.start;
 
-    // Expose remove method for external cleanup
-    prompt.remove = () => {
-      cleanup();
-    };
+    // Expose dismiss method for external cleanup (fixed: no name collision)
+    prompt.dismiss = doCleanup;
 
     return prompt;
   };
