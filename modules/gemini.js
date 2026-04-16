@@ -131,10 +131,27 @@ Return ONLY a raw JSON object: {"segments": [{start, end, label, type}]}
 - "label" should be the sponsor/product name if identifiable, otherwise the type description
 - If no valid segments remain, return: {"segments": []}
 
-RULES:
-- No explanation, no markdown. Just the JSON.
-- Use the context timestamps to determine accurate start/end boundaries.
-- Look for transitions like "this video is sponsored by", "check out my Patreon", "don't forget to like and subscribe".`;
+CRITICAL FALSE POSITIVE REMOVAL RULES (remove segment if any apply):
+- Music, audio interludes, intro/outro music, background beats — these are NEVER "engagement", "sponsor", or "self_promo"
+- A casual/incidental "like and subscribe" mention while explaining actual content — this is NOT engagement
+- Any segment under 5 seconds duration — remove as too short to be a meaningful dedicated segment
+- Transitions, B-roll, or music-only periods without spoken call-to-action
+
+ENGAGEMENT QUALIFICATION (must meet ALL):
+✓ The segment is a DEDICATED STANDALONE break where the EXCLUSIVE purpose is viewer engagement
+✓ The context shows the speaker STOPPED normal content to deliver this call-to-action
+✓ Contains explicit action words: "like and subscribe", "follow me on [platform]", "visit my website", "check out my Patreon/Merch", "comment below"
+✗ A single passing sentence within educational content is a FALSE POSITIVE
+
+VALID SEGMENT TYPES:
+- "sponsor": Paid promotion, "this video is sponsored by [brand]", product reviews with compensation
+- "self_promo": Creator promoting own channel, Patreon, merchandise, social accounts, upcoming content
+- "engagement": ONLY dedicated like/subscribe/follow/comment/visit segments — nothing else qualifies
+
+REVIEW CRITERIA:
+- Remove false positives aggressively. Better to miss a short CTA than interrupt actual content.
+- Use context timestamps to verify accurate boundaries.
+- If unsure, remove the segment. Conservative detection prevents user frustration.`;
 
   // BUG-16: Sanitize summary text - remove JSON artifacts and malformed bullets
   const sanitizeSummary = (text) => {

@@ -121,7 +121,9 @@ ${pointsRule}
   const buildSponsorPrompt = () => `You are a YouTube video content analyzer. Given a transcript as an array of {t: seconds, s: text} objects, identify all non-content segments including:
 - Sponsored/ad reads by the presenter (type: "sponsor")
 - Self-promotion (channel, Patreon, merch, social links) (type: "self_promo")
-- Engagement calls ("like, subscribe, comment") (type: "engagement")
+- Engagement calls — dedicated standalone segments asking viewers to "like and subscribe", "follow me on Instagram/TikTok", "visit my website", "comment below" (type: "engagement")
+
+IMPORTANT: To qualify as a segment, it must be a DEDICATED STANDALONE break in the content — not a passing mention within normal speech.
 
 Return ONLY a raw JSON object in this exact format:
 {"segments": [{"start": 123, "end": 187, "label": "Sponsor name or description", "type": "sponsor"}]}
@@ -133,7 +135,21 @@ Rules:
 - "end" uses the timestamp of the last sentence in the segment + estimated duration (5–15s).
 - "type" must be exactly one of: "sponsor", "self_promo", "engagement".
 - "label" should be the sponsor/product name if identifiable, otherwise the type description.
-- Return valid JSON only. No explanation, no markdown.`;
+- Return valid JSON only. No explanation, no markdown.
+
+EXCLUSION RULES (never flag these as segments):
+- Music, audio interludes, intro/outro music, background beats — these are NEVER "engagement" content
+- A passing mention like "like this video" within normal educational/explanatory content
+- Transitions, B-roll, or visual-only content without a spoken call-to-action
+- Casual sign-offs like "thanks for watching" — NOT engagement unless actively asking for action
+
+ENGAGEMENT QUALIFICATION:
+✓ MUST be a dedicated standalone segment where the ONLY purpose is asking for viewer action
+✓ MUST include explicit action words: "like and subscribe", "follow me on [platform]", "visit [website]", "check out my Patreon", "comment below"
+✗ A single sentence "please like this video" while explaining a topic is NOT engagement — it stays in normal content
+
+MINIMUM SEGMENT LENGTH:
+- All detected segments must be at least 5 seconds long. Segments under 5 seconds are false positives and should not be returned.`;
 
   // ───────────────────────────────────────────────────────────────────────────
   // Summary Generation (single call, no retry)

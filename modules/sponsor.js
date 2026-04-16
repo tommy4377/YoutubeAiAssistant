@@ -88,16 +88,26 @@
       }
     }
 
+    // Safety filter: remove segments under 5 seconds (false positives)
+    const filteredSegments = finalSegments.filter(seg => {
+      const duration = seg.end - seg.start;
+      if (duration < 5) {
+        console.log(`[YT AI] Filtered out short segment (${duration}s): ${seg.type} - too short to be valid`);
+        return false;
+      }
+      return true;
+    });
+
     // Save to cache (BUG-02 fix: reuse the first cache object)
-    cache[videoId] = finalSegments;
+    cache[videoId] = filteredSegments;
     const keys = Object.keys(cache);
     if (keys.length > SPONSOR_CACHE_MAX) {
       keys.slice(0, keys.length - SPONSOR_CACHE_MAX).forEach(k => delete cache[k]);
     }
     saveCache(cache);
 
-    console.log(`[YT AI] Sponsor detection: ${finalSegments.length} segment(s) saved to cache`);
-    return finalSegments;
+    console.log(`[YT AI] Sponsor detection: ${filteredSegments.length} segment(s) saved to cache (${finalSegments.length - filteredSegments.length} filtered out)`);
+    return filteredSegments;
   };
 
   // ───────────────────────────────────────────────────────────────────────────
