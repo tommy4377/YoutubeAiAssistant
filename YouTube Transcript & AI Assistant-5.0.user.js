@@ -18,14 +18,14 @@
      // @connect      *.googlevideo.com
      // @noframes
      // @run-at       document-start
-       // @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/constants.js?v=38
-       // @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/styles.js?v=38
-       // @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/transcript.js?v=38
-       // @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/groq.js?v=38
-       // @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/gemini.js?v=38
-       // @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/sponsor.js?v=38
-       // @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/ui.js?v=38
-       // @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/main.js?v=38
+       // @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/constants.js?v=39
+       // @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/styles.js?v=39
+       // @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/transcript.js?v=39
+       // @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/groq.js?v=39
+       // @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/gemini.js?v=39
+       // @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/sponsor.js?v=39
+       // @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/ui.js?v=39
+       // @require      https://raw.githubusercontent.com/tommy4377/YoutubeAiAssistant/refs/heads/main/modules/main.js?v=39
      // ==/UserScript==
 
      // All logic loaded via @require modules. See /modules/ directory for source.
