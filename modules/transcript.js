@@ -249,7 +249,8 @@
         ? parts[0] * 3600 + parts[1] * 60 + parts[2]
         : parts[0] * 60 + (parts[1] || 0);
       return { start, text };
-    }).filter(l => l.text);
+    // BUG-NU-2: filter out invalid timestamps
+    }).filter(l => l.text && !isNaN(l.start) && l.start >= 0);
   };
 
   // ───────────────────────────────────────────────────────────────────────────

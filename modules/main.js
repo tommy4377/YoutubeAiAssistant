@@ -159,6 +159,9 @@
         this.videoId = new URLSearchParams(location.search).get('v');
         if (!this.videoId) return;
 
+        // BUG-LE-3: Reset rate limit state for new video
+        GROQ?.resetRateLimit?.();
+
         // Cleanup previous state
         this._stopSync();
         clearTimeout(this._scrollTimer);
@@ -187,6 +190,12 @@
       }
       } finally {
         this._isIniting = false;  // BUG-04 fix: reset immediately without timeout
+        // BUG-RC-2: If video changed during async init, re-initialize
+        const latestVideoId = new URLSearchParams(location.search).get('v');
+        if (latestVideoId && latestVideoId !== this.videoId) {
+          console.log('[YT AI] Video changed during init, re-initializing...');
+          this.init();
+        }
       }
     }
 
@@ -339,6 +348,8 @@
         onTabSwitch: (tab) => {
           this._prevTab = this.tab;
           this.tab = tab;
+          // BUG-SS-3: Reset scroll lock when switching to transcript tab
+          if (tab === 'transcript') this._userScrolled = false;
           this._renderTab();
         },
         onTimestampToggle: () => {
@@ -532,10 +543,13 @@
     _startSync() {
       this._stopSync();
       this._syncActive = -1;
+      // BUG-PF-1: Cache video element to avoid querying DOM every frame
+      let cachedVideo = doc.querySelector('video');
 
       const loop = () => {
         if (this.tab === 'transcript') {
-          const video = doc.querySelector('video');
+          // Use cached video if still connected, otherwise re-query
+          const video = cachedVideo?.isConnected ? cachedVideo : (cachedVideo = doc.querySelector('video'));
           const body = doc.getElementById('ytai-body');
           if (video && body && this.data.length) {
             const idx = this._findActiveIndex(video.currentTime);

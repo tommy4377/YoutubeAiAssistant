@@ -103,9 +103,16 @@
         if (segs?.length) {
           console.log(`[YT AI] Sponsor detection: chunk ${i + 1} found ${segs.length} segment(s)`);
           // Deduplicate by (start, type) key - segments at chunk boundaries may appear in both chunks
+          // Keep the segment with the longer duration (BUG-LE-2 fix)
           for (const seg of segs) {
             const key = `${seg.start}-${seg.type}`;
-            if (!seenKeys.has(key)) {
+            if (seenKeys.has(key)) {
+              // Find existing and keep the longer one
+              const existingIdx = allGroqSegments.findIndex(s => `${s.start}-${s.type}` === key);
+              if (existingIdx !== -1 && seg.end > allGroqSegments[existingIdx].end) {
+                allGroqSegments[existingIdx] = seg;
+              }
+            } else {
               seenKeys.add(key);
               allGroqSegments.push(seg);
             }
@@ -167,12 +174,18 @@
   // ───────────────────────────────────────────────────────────────────────────
   // Track the active prompt globally so it can be dismissed externally
   let _activePrompt = null;
+  let _activeKeyHandler = null;  // BUG-ML-2: track keydown handler for guaranteed cleanup
 
   // Fix: Export dismiss function for main.js to call during cleanup
   const dismissAllPrompts = () => {
     if (_activePrompt) {
       _activePrompt.dismiss();
       _activePrompt = null;
+    }
+    // BUG-ML-2: also remove keydown listener
+    if (_activeKeyHandler) {
+      doc.removeEventListener('keydown', _activeKeyHandler, true);
+      _activeKeyHandler = null;
     }
     // Also remove any orphaned DOM elements
     const existing = doc.getElementById('ytai-skip-prompt');
@@ -288,10 +301,15 @@
       }
     };
 
+    // BUG-ML-2: Track the handler for external cleanup
+    _activeKeyHandler = onKey;
+
     const doCleanup = () => {
       if (dismissed) return; // Fix: prevent double execution
       dismissed = true;
       doc.removeEventListener('keydown', onKey, true);
+      // BUG-ML-2: clear global reference
+      _activeKeyHandler = null;
       // Fix: use native DOM remove directly, not custom method
       if (prompt.parentNode) {
         prompt.parentNode.removeChild(prompt);

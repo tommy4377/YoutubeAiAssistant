@@ -31,46 +31,48 @@
     if (_isProcessingQueue) return;
     _isProcessingQueue = true;
 
-    while (_callQueue.length > 0) {
-      const { options, resolve, reject } = _callQueue.shift();
+    try {
+      while (_callQueue.length > 0) {
+        const { options, resolve, reject } = _callQueue.shift();
 
-      // Enforce minimum gap between calls with jitter
-      const now = Date.now();
-      const timeSinceLastCall = now - _lastCallTime;
-      const jitter = Math.floor(Math.random() * JITTER_MS * 2) - JITTER_MS;
-      const currentGap = _adaptiveGapMs + jitter;
-      
-      if (timeSinceLastCall < currentGap) {
-        const waitMs = currentGap - timeSinceLastCall;
-        console.log(`[YT AI] Rate limit: waiting ${waitMs}ms before next call (gap=${_adaptiveGapMs}ms${jitter >= 0 ? '+' : ''}${jitter}ms)`);
-        await new Promise(r => setTimeout(r, waitMs));
-      }
-      _lastCallTime = Date.now();
+        // Enforce minimum gap between calls with jitter
+        const now = Date.now();
+        const timeSinceLastCall = now - _lastCallTime;
+        const jitter = Math.floor(Math.random() * JITTER_MS * 2) - JITTER_MS;
+        const currentGap = _adaptiveGapMs + jitter;
+        
+        if (timeSinceLastCall < currentGap) {
+          const waitMs = currentGap - timeSinceLastCall;
+          console.log(`[YT AI] Rate limit: waiting ${waitMs}ms before next call (gap=${_adaptiveGapMs}ms${jitter >= 0 ? '+' : ''}${jitter}ms)`);
+          await new Promise(r => setTimeout(r, waitMs));
+        }
+        _lastCallTime = Date.now();
 
-      // Execute the actual request
-      try {
-        const result = await executeRequest(options);
-        // Success - slowly reduce adaptive gap back toward normal
-        if (_adaptiveGapMs > MIN_CALL_GAP_MS && Date.now() - _last429Time > 60000) {
-          _adaptiveGapMs = Math.max(MIN_CALL_GAP_MS, _adaptiveGapMs - 500);
-          _consecutive429s = 0;
+        // Execute the actual request
+        try {
+          const result = await executeRequest(options);
+          // Success - slowly reduce adaptive gap back toward normal
+          if (_adaptiveGapMs > MIN_CALL_GAP_MS && Date.now() - _last429Time > 60000) {
+            _adaptiveGapMs = Math.max(MIN_CALL_GAP_MS, _adaptiveGapMs - 500);
+            _consecutive429s = 0;
+          }
+          resolve(result);
+        } catch (e) {
+          // On 429, increase adaptive gap for next calls
+          if (e.status === 429) {
+            _consecutive429s++;
+            _last429Time = Date.now();
+            // Exponential backoff: 3s → 5s → 8s → 12s → 15s cap
+            const backoffMultiplier = Math.min(_consecutive429s, 4);
+            _adaptiveGapMs = Math.min(MAX_CALL_GAP_MS, MIN_CALL_GAP_MS * (1 + backoffMultiplier * 0.8));
+            console.warn(`[YT AI] Rate limit 429 #${_consecutive429s}, increasing gap to ${_adaptiveGapMs}ms`);
+          }
+          reject(e);
         }
-        resolve(result);
-      } catch (e) {
-        // On 429, increase adaptive gap for next calls
-        if (e.status === 429) {
-          _consecutive429s++;
-          _last429Time = Date.now();
-          // Exponential backoff: 3s → 5s → 8s → 12s → 15s cap
-          const backoffMultiplier = Math.min(_consecutive429s, 4);
-          _adaptiveGapMs = Math.min(MAX_CALL_GAP_MS, MIN_CALL_GAP_MS * (1 + backoffMultiplier * 0.8));
-          console.warn(`[YT AI] Rate limit 429 #${_consecutive429s}, increasing gap to ${_adaptiveGapMs}ms`);
-        }
-        reject(e);
       }
+    } finally {
+      _isProcessingQueue = false;
     }
-
-    _isProcessingQueue = false;
   };
 
   const executeRequest = (options) => new Promise((resolve, reject) => {
@@ -416,6 +418,12 @@ MIN LENGTH: Segments under 5s are false positives, do not return them.`;
   // Exports
   // ───────────────────────────────────────────────────────────────────────────
   window.YTAI = window.YTAI || {};
+  // Reset rate limit state (call on navigation)
+  const resetRateLimit = () => {
+    _adaptiveGapMs = MIN_CALL_GAP_MS;
+    _consecutive429s = 0;
+  };
+
   window.YTAI.GROQ = {
     callSummary,
     callSummaryWithUI,
@@ -426,5 +434,6 @@ MIN LENGTH: Segments under 5s are false positives, do not return them.`;
     normalizeResponse,
     request,
     sanitizeSummary,  // BUG-16: export for UI module usage
+    resetRateLimit,   // Reset adaptive rate limiting between videos
   };
 })();
