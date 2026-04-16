@@ -94,9 +94,9 @@
         }
       } catch (e) {
         if (e.status === 429) {
-          // Rate limit - propagate to allow retry logic in caller
-          console.warn(`[YT AI] Sponsor chunk ${i + 1} rate limited (429)`);
-          throw e;
+          // Rate limit - stop processing but keep segments from completed chunks
+          console.warn(`[YT AI] Sponsor chunk ${i + 1} rate limited (429), using ${allGroqSegments.length} segment(s) from completed chunks`);
+          break;
         }
         // Other errors - log and continue to next chunk
         console.warn(`[YT AI] Sponsor chunk ${i + 1} failed:`, e.message);
