@@ -40,8 +40,10 @@
   };
 
   // ───────────────────────────────────────────────────────────────────────────
-  // Detection Orchestrator (1 Groq call + 1 Gemini review)
+  // Detection Orchestrator (chunked Groq calls + 1 Gemini review)
   // ───────────────────────────────────────────────────────────────────────────
+  const CHUNK_SIZE = 175; // lines per chunk (~5-7KB JSON each, well under Groq limits)
+
   const detectSponsors = async (videoId, data, groqKey, geminiKey) => {
     if (!data?.length || !videoId) {
       return [];
@@ -53,38 +55,67 @@
       return cache[videoId];
     }
 
+    // Build slim transcript array with absolute timestamps
     const slim = data.map(l => ({ t: Math.round(l.start), s: l.text }));
-    const transcriptJson = JSON.stringify(slim).substring(0, 15000);
-    const model = SPONSOR_MODEL;
-
-    console.log('[YT AI] Sponsor detection: Groq call…');
-
-    let groqSegments = [];
-    try {
-      groqSegments = await GROQ.callSponsor(groqKey, transcriptJson, model);
-    } catch (e) {
-      if (e.status === 429) {
-        console.warn('[YT AI] Sponsor call rate limited (429)');
-      } else {
-        console.warn('[YT AI] Sponsor call failed:', e.message);
-      }
-      // BUG-10 fix: don't cache empty results on error - return without saving to cache
-      return [];
+    
+    // Split into chunks for full transcript coverage
+    const chunks = [];
+    for (let i = 0; i < slim.length; i += CHUNK_SIZE) {
+      // Add overlap: include last 10 lines of previous chunk for transition continuity
+      const startIdx = i === 0 ? 0 : Math.max(0, i - 10);
+      const endIdx = Math.min(slim.length, i + CHUNK_SIZE);
+      chunks.push(slim.slice(startIdx, endIdx));
     }
 
-    console.log(`[YT AI] Sponsor detection: Groq found ${groqSegments.length} segment(s)`);
+    const model = SPONSOR_MODEL;
+    console.log(`[YT AI] Sponsor detection: ${chunks.length} chunk(s), ${slim.length} lines total`);
 
-    let finalSegments = groqSegments;
+    // Process chunks sequentially to respect rate limits
+    const allGroqSegments = [];
+    const seenKeys = new Set(); // For deduplication
 
-    // If we have Gemini key and Groq found segments, review with Gemini
-    if (geminiKey && groqSegments.length > 0) {
-      console.log('[YT AI] Sponsor detection: Gemini review…');
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const chunkJson = JSON.stringify(chunk);
+      console.log(`[YT AI] Sponsor detection: chunk ${i + 1}/${chunks.length} (${chunkJson.length} chars, ${chunk.length} lines)…`);
+
       try {
-        finalSegments = await GEMINI.reviewSponsors(geminiKey, groqSegments, data);
+        const segs = await GROQ.callSponsor(groqKey, chunkJson, model);
+        if (segs?.length) {
+          console.log(`[YT AI] Sponsor detection: chunk ${i + 1} found ${segs.length} segment(s)`);
+          // Deduplicate by (start, type) key - segments at chunk boundaries may appear in both chunks
+          for (const seg of segs) {
+            const key = `${seg.start}-${seg.type}`;
+            if (!seenKeys.has(key)) {
+              seenKeys.add(key);
+              allGroqSegments.push(seg);
+            }
+          }
+        }
+      } catch (e) {
+        if (e.status === 429) {
+          // Rate limit - propagate to allow retry logic in caller
+          console.warn(`[YT AI] Sponsor chunk ${i + 1} rate limited (429)`);
+          throw e;
+        }
+        // Other errors - log and continue to next chunk
+        console.warn(`[YT AI] Sponsor chunk ${i + 1} failed:`, e.message);
+      }
+    }
+
+    console.log(`[YT AI] Sponsor detection: Groq found ${allGroqSegments.length} unique segment(s) across all chunks`);
+
+    let finalSegments = allGroqSegments;
+
+    // Global Gemini review across all detected segments
+    if (geminiKey && allGroqSegments.length > 0) {
+      console.log('[YT AI] Sponsor detection: Gemini review of combined segments…');
+      try {
+        finalSegments = await GEMINI.reviewSponsors(geminiKey, allGroqSegments, data);
         console.log(`[YT AI] Sponsor detection: Gemini confirmed ${finalSegments.length} segment(s)`);
       } catch (e) {
         console.warn('[YT AI] Gemini sponsor review failed, using Groq result:', e.message);
-        finalSegments = groqSegments;
+        finalSegments = allGroqSegments;
       }
     }
 
