@@ -211,7 +211,9 @@ Rules:
   // ───────────────────────────────────────────────────────────────────────────
   // Sponsor Detection (Single Call)
   // ───────────────────────────────────────────────────────────────────────────
-  const callSponsor = async (apiKey, transcriptJson, model) => {
+  const callSponsor = async (apiKey, transcriptJson, model, _attempt = 1) => {
+    const MAX_429_RETRIES = 3;
+
     try {
       const res = await request({
         method: 'POST',
@@ -228,17 +230,27 @@ Rules:
           ],
           response_format: { type: 'json_object' },
           temperature: 0.1,
-          max_completion_tokens: 256, // Reduced from 512 - sponsor JSON is short
+          max_completion_tokens: 256,
           stream: false,
         }),
       });
 
-      // 429 — throw so caller can handle (don't cache empty results)
       if (res.status === 429) {
+        const retryAfter = parseInt((res.responseHeaders || '').match(/retry-after:\s*(\d+)/i)?.[1] || '10');
+        if (_attempt <= MAX_429_RETRIES) {
+          const delay = Math.min(retryAfter, 90) * 1000;
+          console.warn(`[YT AI] Sponsor call rate limited (429), retry ${_attempt}/${MAX_429_RETRIES} in ${Math.round(delay / 1000)}s…`);
+          await new Promise(r => setTimeout(r, delay));
+          return callSponsor(apiKey, transcriptJson, model, _attempt + 1);
+        }
         const err = new Error('Rate limit exceeded');
         err.status = 429;
-        err.retryAfter = parseInt((res.responseHeaders || '').match(/retry-after:\s*(\d+)/i)?.[1] || '60');
+        err.retryAfter = retryAfter;
         throw err;
+      }
+
+      if (res.status >= 400) {
+        throw new Error(`Groq API error: HTTP ${res.status}`);
       }
 
       const resp = JSON.parse(res.responseText);
@@ -252,6 +264,7 @@ Rules:
         typeof s.start === 'number' && typeof s.end === 'number' && s.end > s.start
       );
     } catch (e) {
+      if (e.status === 429) throw e;
       console.warn('[YT AI] Sponsor detection call failed:', e);
       return [];
     }
