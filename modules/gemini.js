@@ -112,69 +112,23 @@ RULES:
 INPUT FORMAT:
 You will receive the AI's raw output containing keypoints and summary. Review and improve it, then output your reviewed JSON.`;
 
-  const buildSponsorReviewPrompt = () => `You are reviewing sponsor/non-content segments detected in a YouTube video transcript. Given the candidate segments and surrounding transcript context, validate and correct them.
+  const buildSponsorReviewPrompt = () => `Review sponsor/non-content segments against transcript context. Validate, correct, and adjust boundaries.
 
-TASK:
-1. For each candidate segment: verify it is truly a sponsor read, self-promotion, or engagement call using the transcript context provided. Remove false positives.
-2. Adjust start/end timestamps with boundary buffering and transition bridges for human-like editing.
-3. Add any missed segments that should have been detected (only if clearly present in the context).
-4. Correct labels if wrong (e.g., a segment labeled "sponsor" that is actually "self_promo").
+TASK: 1) Remove false positives. 2) Adjust start/end for smooth skips. 3) Add missed segments. 4) Correct labels.
 
-INPUT FORMAT:
-- Candidates: JSON array of {start, end, label, type}
-- Context: transcript lines around each segment with timestamps in format [{t: seconds, s: text}]
+INPUT: candidates [{start,end,label,type}], context [{t,s}] around each.
+OUTPUT: {"segments":[{start,end,label,type}]} or {"segments":[]}. type must be "sponsor"/"self_promo"/"engagement". start/end as integers (seconds). label=product name or description.
 
-OUTPUT FORMAT:
-Return ONLY a raw JSON object: {"segments": [{start, end, label, type}]}
-- "start" and "end" must be integers (seconds from the original transcript timestamps)
-- "type" must be exactly one of: "sponsor", "self_promo", "engagement"
-- "label" should be the sponsor/product name if identifiable, otherwise the type description
-- If no valid segments remain, return: {"segments": []}
+MUSIC IS SACRED: Discard ANY segment with music cues ([Music], musical symbols, beats, instrumental markers). Music is always core content, never skippable. Even brief promo during music intros must be preserved.
 
-MUSIC IS SACRED (MANDATORY DISCARD RULE):
-- BEFORE confirming any segment, check if the text contains music cues: [Music], ♪, ♫, [Laughter with background beats], rhythmic patterns, instrumental markers
-- If ANY music indicator is present, DISCARD immediately — even if there's a slight self-promo during a music-heavy intro
-- When choosing between keeping music or skipping a 5-second mention, ALWAYS preserve the music
-- This rule is absolute: music content is never a skippable segment
+TRANSITION BRIDGES: Extend start to boundary-shifting phrases: "But first...", "Before we dive in...", "Thanks to...", "This video is sponsored by...", "Quick break...", "Speaking of..." Include the full lead-in sentence.
 
-TRANSITION BRIDGES (Boundary Shifting Words):
-Look for specific phrases that signal content shifts and extend the start timestamp to the beginning of the sentence containing these words:
-- "But first..." / "But before we get started..." / "I'll tell you the secret in a moment, but first..."
-- "Speaking of..." / "That reminds me..." / "Quick break..."
-- "Before we get into..." / "Before we dive in..." / "Before we continue..."
-- "Thanks to..." / "This video is made possible by..." / "This episode is brought to you by..."
-- "Real quick..." / "Quick word..." / "A quick message..."
-The segment MUST start at the beginning of the sentence with these boundary-shifting words.
+ENGAGEMENT: Skip external-traffic CTAs (links, signups, Patreon exclusives). KEEP social proof ("As you can see in the comments..."). Do NOT skip CTAs mixed with educational content.
 
-ENGAGEMENT NUANCE (Quality over Quantity):
-✗ SKIP these external CTAs: "Go to my link in the description", "Sign up for my newsletter", "Join my Patreon for the extended cut", "Visit my website", "Follow me on Instagram for more"
-✓ KEEP integrated social proof: "As you can see in the comments...", "If you agree, hit like", "The community has been asking..."
-✗ NOT a skip candidate: If the CTA is mixed with factual explanation of the video topic
-✓ ONLY skip when the CTA is purely about driving traffic elsewhere with no educational value in that moment
+BOUNDARY BUFFERING: End 1 second early (subtract 1s from detected end) to avoid cutting into next content. Be strict with start timestamps (precise boundary only).
 
-BOUNDARY BUFFERING (Generous with the End, Strict with the Start):
-- END timestamp: Subtract 1 second from the detected end time (end 1 second early)
-- Better to leave a bit of the ad than to cut into the first word of the next content segment
-- This ensures the user never misses the start of actual content
-- Example: If the ad ends at t=187, set end to t=186
-- START timestamp: Be strict — only include the boundary-shifting sentence, no earlier content
+REMOVAL RULES: Discard segments with music cues, under 5s, or where boundary is unclear. When uncertain, remove.`;
 
-CRITICAL REMOVAL RULES (remove segment if any apply):
-- ANY music or music-cue indicators in the text — remove immediately
-- Any segment under 5 seconds duration — remove as too short
-- External CTAs that appear alongside educational content (mixed purpose)
-- Segments where the boundary is unclear — when uncertain, remove
-
-VALID SEGMENT TYPES:
-- "sponsor": Paid promotion, "this video is sponsored by [brand]", product reviews with compensation
-- "self_promo": Creator promoting own channel, Patreon, merchandise, social accounts, upcoming content
-- "engagement": Pure external CTAs with no educational value in that moment (not mixed with content)
-
-REVIEW CRITERIA:
-- PRIORITY 1: Music preservation — discard any segment with music cues
-- PRIORITY 2: Boundary buffering — end 1 second early, start precisely at boundary-shifting words
-- PRIORITY 3: Engagement nuance — skip external traffic CTAs, keep integrated social proof
-- PRIORITY 4: When uncertain, remove the segment — human-like editing prioritizes content continuity`;
 
   // BUG-16: Sanitize summary text - remove JSON artifacts and malformed bullets
   const sanitizeSummary = (text) => {

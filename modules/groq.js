@@ -118,47 +118,23 @@ ${pointsRule}
 - For vlogs, opinions, or personal content: you may refer to "${channelName}" when contextually appropriate.`;
   };
 
-  const buildSponsorPrompt = () => `You are a YouTube video content analyzer. Given a transcript as an array of {t: seconds, s: text} objects, identify all non-content segments including:
-- Sponsored/ad reads by the presenter (type: "sponsor")
-- Self-promotion (channel, Patreon, merch, social links) (type: "self_promo")
-- Engagement calls — specific external CTAs like visiting sites, joining platforms, or accessing exclusive content (type: "engagement")
+  const buildSponsorPrompt = () => `Identify non-content segments in a YouTube transcript ({t: seconds, s: text}):
+- "sponsor": paid ad reads
+- "self_promo": channel/merch/Patreon/social promotion
+- "engagement": external CTAs driving traffic away (links, newsletters, Patreon exclusives). NOT casual "like/subscribe" asides or social proof references.
 
-Return ONLY a raw JSON object in this exact format:
-{"segments": [{"start": 123, "end": 187, "label": "Sponsor name or description", "type": "sponsor"}]}
+Return ONLY: {"segments": [{"start":123,"end":187,"label":"Name","type":"sponsor"}]}
+No segments found: {"segments": []}
 
-If no such segments are found, return: {"segments": []}
+Rules: start/end as integers (seconds), end=last sentence+5-15s, type must be "sponsor"/"self_promo"/"engagement", label=product name or description. JSON only, no markdown.
 
-Rules:
-- "start" and "end" must be integers (seconds).
-- "end" uses the timestamp of the last sentence in the segment + estimated duration (5–15s).
-- "type" must be exactly one of: "sponsor", "self_promo", "engagement".
-- "label" should be the sponsor/product name if identifiable, otherwise the type description.
-- Return valid JSON only. No explanation, no markdown.
+MUSIC IS SACRED: Discard ANY segment containing music cues ([Music], musical note symbols, [Laughter with beats], rhythmic patterns, instrumental markers). Music is always core content, never skippable, even with brief promo mentions.
 
-MUSIC IS SACRED (MANDATORY CHECK):
-- BEFORE returning any segment, check if the segment text contains music cues: [Music], ♪, ♫, [Laughter with background beats], rhythmic lyrical patterns, instrumental descriptions, or similar audio markers
-- If ANY music indicator is present, DISCARD the entire segment immediately — even if there's a slight self-promo during a music-heavy intro
-- Music-heavy intros, background music during promotions, musical transitions — ALL must be preserved as core content
-- When choosing between keeping music or skipping a 5-second mention, ALWAYS preserve the music
-- This rule is absolute: music content is never, under any circumstances, a skippable segment
+TRANSITION BRIDGES: Start at boundary-shifting phrases: "But first...", "Before we dive in...", "Thanks to...", "This video is sponsored by...", "Quick break...", "Speaking of..." Include the full lead-in sentence.
 
-TRANSITION BRIDGES (Boundary Shifting Words):
-Look for specific phrases that signal a content shift. The segment MUST start at the beginning of the sentence containing these words:
-- "But first..." / "But before we get started..." / "I'll tell you the secret in a moment, but first..."
-- "Speaking of..." / "That reminds me..." / "Quick break..."
-- "Before we get into..." / "Before we dive in..." / "Before we continue..."
-- "Thanks to..." / "This video is made possible by..." / "This episode is brought to you by..."
-- "Real quick..." / "Quick word..." / "A quick message..."
-EXAMPLE: "I'll tell you the secret in a moment, but first, let me thank Squarespace" → start at the beginning of that sentence, not at "Squarespace"
+ENGAGEMENT: Skip external-traffic CTAs (links, signups, Patreon exclusives). KEEP social proof ("As you can see in the comments..."). Do NOT skip CTAs mixed with educational content.
 
-ENGAGEMENT NUANCE (Quality over Quantity):
-✗ SKIP these external CTAs: "Go to my link in the description", "Sign up for my newsletter", "Join my Patreon for the extended cut", "Visit my website", "Follow me on Instagram for more"
-✓ KEEP integrated social proof: "As you can see in the comments...", "If you agree, hit like", "The community has been asking..."
-✗ NOT a skip candidate: If the CTA is mixed with factual explanation of the video topic (e.g., "Subscribe to learn more about [topic]" while explaining the topic)
-✓ ONLY skip when the CTA is purely about driving traffic elsewhere with no educational value in that moment
-
-MINIMUM SEGMENT LENGTH:
-- All detected segments must be at least 5 seconds long. Segments under 5 seconds are false positives and should not be returned.`;
+MIN LENGTH: Segments under 5s are false positives, do not return them.`;
 
   // ───────────────────────────────────────────────────────────────────────────
   // Summary Generation (single call, no retry)
